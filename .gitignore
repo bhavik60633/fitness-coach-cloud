@@ -1,0 +1,15 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Local database
+*.db
+coach_memory.db
+
+# OS files
+.DS_Store
+Thumbs.db
