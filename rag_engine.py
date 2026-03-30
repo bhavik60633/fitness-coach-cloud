@@ -25,19 +25,19 @@ EMBED_MODEL  = "all-MiniLM-L6-v2"
 GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 N_RESULTS    = 3
 TEMPERATURE  = 0.8
-MAX_TOKENS   = 1024
+MAX_TOKENS   = 2048
 # ────────────────────────────────────────────────────────────────────────────
 
-BASE_SYSTEM = """You are Bhavik's personal fitness coach. You text him like a real trainer would — casual, direct, warm. No corporate tone, no bullet-point overload.
+BASE_SYSTEM = """You are Bhavik's personal fitness coach. You text him like a real trainer would — casual, direct, warm. No corporate tone.
 
 Rules you NEVER break:
-- Keep replies SHORT unless he asks for a full plan. 2-4 sentences for casual questions.
+- Match answer length to the question. Simple question = 2-3 sentences. If he asks for a plan, diet breakdown, exercise list, or anything detailed — give the FULL complete answer, don't cut it short.
 - Sound like a human texting, not a chatbot generating a report.
 - Never use [X] or placeholder text. If you don't know a value, skip it or ask him.
 - Never repeat yourself or restate what he just said back to him.
-- Reference his actual goal and recent logs if relevant — but naturally, not robotically.
-- For plans/lists, use simple numbered points. No bold markdown unless it's a number that matters.
-- End with ONE short punchy line max — not a long motivational speech.
+- ALWAYS reference his weight, goal, and recent logs when relevant — treat this info as facts you know.
+- For plans/lists, use simple numbered points.
+- Remember everything from the conversation history — treat it as your own memory.
 
 You know his documents well: workouts, diet (ETF method, 1500-cal veg plans, 62 recipes), sleep guide, exercise science lectures. Use that knowledge confidently."""
 
@@ -104,20 +104,21 @@ class FitnessCoachRAG:
                 goal_ctx = self.memory.format_goal_context(user_id)
                 context_lines.append(f"Bhavik's goal: {goal_ctx}")
 
-            # Recent logs — last 3 days
-            logs = self.memory.format_recent_logs(user_id, days=3)
+            # Recent logs — last 7 days
+            logs = self.memory.format_recent_logs(user_id, days=7)
             if logs and logs != "No recent logs.":
                 context_lines.append(f"Recent logs:\n{logs}")
 
-            # Conversation history — last 6 exchanges
-            history = self.memory.get_recent_history(user_id, limit=6)
+            # Conversation history — last 20 messages with timestamps
+            history = self.memory.get_recent_history(user_id, limit=20)
             if history:
                 hist_lines = []
                 for h in history:
                     role = "Bhavik" if h["role"] == "user" else "Coach"
-                    msg = h["message"][:200] + "…" if len(h["message"]) > 200 else h["message"]
-                    hist_lines.append(f"{role}: {msg}")
-                context_lines.append("Recent chat:\n" + "\n".join(hist_lines))
+                    ts = h.get("timestamp", "")[:16] if h.get("timestamp") else ""
+                    msg = h["message"][:600] + "…" if len(h["message"]) > 600 else h["message"]
+                    hist_lines.append(f"[{ts}] {role}: {msg}")
+                context_lines.append("Conversation history (oldest first):\n" + "\n".join(hist_lines))
 
             if context_lines:
                 system_parts.append(
