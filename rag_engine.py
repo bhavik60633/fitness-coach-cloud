@@ -12,7 +12,7 @@ from typing import Generator
 from dotenv import load_dotenv
 load_dotenv()
 
-from groq import Groq
+from openai import OpenAI
 import chromadb
 from sentence_transformers import SentenceTransformer
 
@@ -22,7 +22,7 @@ from memory import CoachMemory
 DB_PATH      = os.getenv("CHROMA_DB_PATH", "./chroma_db")
 COLLECTION   = "fitness_docs"
 EMBED_MODEL  = "all-MiniLM-L6-v2"
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 N_RESULTS    = 3
 TEMPERATURE  = 0.8
 MAX_TOKENS   = 2048
@@ -46,17 +46,17 @@ class FitnessCoachRAG:
     def __init__(
         self,
         db_path: str = DB_PATH,
-        model: str = GROQ_MODEL,
+        model: str = OPENAI_MODEL,
         memory: CoachMemory | None = None,
     ) -> None:
         self.model   = model
         self.memory  = memory or CoachMemory()
 
-        # Groq client
-        api_key = os.getenv("GROQ_API_KEY", "")
+        # OpenAI client
+        api_key = os.getenv("OPENAI_API_KEY", "")
         if not api_key:
-            raise RuntimeError("GROQ_API_KEY not set!")
-        self.groq = Groq(api_key=api_key)
+            raise RuntimeError("OPENAI_API_KEY not set!")
+        self.client = OpenAI(api_key=api_key)
 
         # ChromaDB
         self.client     = chromadb.PersistentClient(path=db_path)
@@ -141,7 +141,7 @@ class FitnessCoachRAG:
     # ── Call Groq API ─────────────────────────────────────────────────────
 
     def _call_groq(self, messages: list[dict], temperature: float = TEMPERATURE) -> str:
-        response = self.groq.chat.completions.create(
+        response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,
@@ -174,7 +174,7 @@ class FitnessCoachRAG:
         context  = self._retrieve(question)
         messages = self._build_messages(question, context, user_id)
 
-        stream = self.groq.chat.completions.create(
+        stream = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=TEMPERATURE,
@@ -329,8 +329,8 @@ class FitnessCoachRAG:
         )
 
         try:
-            response = self.groq.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
                 messages=[
                     {
                         "role": "user",
@@ -369,5 +369,5 @@ class FitnessCoachRAG:
     # ── Health check (always True for cloud — no Ollama dependency) ───────
 
     def is_ollama_running(self) -> bool:
-        """Always returns True in cloud mode (Groq API is always available)."""
+        """Always returns True in cloud mode (OpenAI API is always available)."""
         return True
