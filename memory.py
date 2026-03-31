@@ -228,3 +228,80 @@ class CoachMemory:
             .execute()
         )
         return result.data if result.data else []
+
+    # ── Food / calorie logs ───────────────────────────────────────────────
+
+    def save_food_log(
+        self,
+        user_id: str,
+        meal_name: str,
+        food_description: str,
+        calories: int,
+        protein_g: float = 0,
+        carbs_g: float = 0,
+        fat_g: float = 0,
+        image_analyzed: bool = False,
+        notes: str = "",
+    ) -> str:
+        """Save a food entry. Returns its UUID."""
+        result = self.db.table("food_logs").insert({
+            "user_id": user_id,
+            "log_date": date.today().isoformat(),
+            "meal_name": meal_name,
+            "food_description": food_description,
+            "calories": calories,
+            "protein_g": protein_g,
+            "carbs_g": carbs_g,
+            "fat_g": fat_g,
+            "image_analyzed": image_analyzed,
+            "notes": notes,
+        }).execute()
+        return result.data[0]["id"] if result.data else ""
+
+    def update_food_log(self, log_id: str, **kwargs: Any) -> None:
+        kwargs["updated_at"] = datetime.utcnow().isoformat()
+        self.db.table("food_logs").update(kwargs).eq("id", log_id).execute()
+
+    def delete_food_log(self, log_id: str) -> None:
+        self.db.table("food_logs").delete().eq("id", log_id).execute()
+
+    def get_food_logs_by_date(self, user_id: str, log_date: str | None = None) -> list[dict]:
+        if not log_date:
+            log_date = date.today().isoformat()
+        result = (
+            self.db.table("food_logs")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("log_date", log_date)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return result.data if result.data else []
+
+    def get_daily_calorie_total(self, user_id: str, log_date: str | None = None) -> dict:
+        logs = self.get_food_logs_by_date(user_id, log_date)
+        total: dict = {"calories": 0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0, "entries": len(logs)}
+        for log in logs:
+            total["calories"]  += log.get("calories")  or 0
+            total["protein_g"] += log.get("protein_g") or 0
+            total["carbs_g"]   += log.get("carbs_g")   or 0
+            total["fat_g"]     += log.get("fat_g")     or 0
+        return total
+
+    def format_food_logs_today(self, user_id: str) -> str:
+        logs = self.get_food_logs_by_date(user_id)
+        if not logs:
+            return "No food logged today yet."
+        lines = []
+        for i, log in enumerate(logs, 1):
+            src = "📷" if log.get("image_analyzed") else "✏️"
+            line = f"{i}. {src} *{log['meal_name']}* — {log['food_description']} ({log['calories']} kcal)"
+            if log.get("protein_g") or log.get("carbs_g") or log.get("fat_g"):
+                line += f"\n   P:{log.get('protein_g',0):.0f}g C:{log.get('carbs_g',0):.0f}g F:{log.get('fat_g',0):.0f}g"
+            lines.append(line)
+        total = self.get_daily_calorie_total(user_id)
+        lines.append(
+            f"\n📊 *Daily Total: {total['calories']} kcal*\n"
+            f"Protein: {total['protein_g']:.0f}g | Carbs: {total['carbs_g']:.0f}g | Fat: {total['fat_g']:.0f}g"
+        )
+        return "\n".join(lines)

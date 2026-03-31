@@ -302,6 +302,70 @@ class FitnessCoachRAG:
         ]
         return self._call_groq(messages, temperature=0.7)
 
+    # ── Food image analysis (Groq vision) ────────────────────────────────
+
+    def analyze_food_image(self, image_base64: str) -> dict:
+        """
+        Analyze a food photo using Groq vision model.
+        Returns a dict: food_description, calories, protein_g, carbs_g, fat_g, meal_name, confidence, notes.
+        """
+        prompt = (
+            "You are a certified nutritionist. Analyze this food image carefully.\n\n"
+            "Identify every food item visible, estimate the portion size, and calculate total nutrition.\n"
+            "Use standard Indian/Asian food nutrition data where applicable.\n\n"
+            "Respond ONLY in this exact JSON format (no extra text, no markdown):\n"
+            "{\n"
+            '  "food_description": "specific food name and description",\n'
+            '  "calories": 450,\n'
+            '  "protein_g": 25.0,\n'
+            '  "carbs_g": 40.0,\n'
+            '  "fat_g": 15.0,\n'
+            '  "meal_name": "Breakfast",\n'
+            '  "confidence": "high",\n'
+            '  "notes": "any important notes about the estimate"\n'
+            "}\n\n"
+            "meal_name must be one of: Breakfast, Lunch, Dinner, Snack.\n"
+            "Be realistic — do NOT underestimate calories. Account for oil, sauces, and hidden calories."
+        )
+
+        try:
+            response = self.groq.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
+                            },
+                            {"type": "text", "text": prompt},
+                        ],
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=512,
+            )
+            raw = response.choices[0].message.content.strip()
+            # Extract JSON robustly
+            import re as _re
+            match = _re.search(r"\{.*\}", raw, _re.DOTALL)
+            if match:
+                return json.loads(match.group())
+        except Exception as exc:
+            print(f"Vision analysis error: {exc}")
+
+        return {
+            "food_description": "Could not identify food",
+            "calories": 0,
+            "protein_g": 0.0,
+            "carbs_g": 0.0,
+            "fat_g": 0.0,
+            "meal_name": "Snack",
+            "confidence": "low",
+            "notes": "Image analysis failed — please log manually.",
+        }
+
     # ── Health check (always True for cloud — no Ollama dependency) ───────
 
     def is_ollama_running(self) -> bool:

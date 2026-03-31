@@ -6,6 +6,7 @@ The Ollama health check is removed (Groq API is always available).
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -66,7 +67,10 @@ rag    = FitnessCoachRAG(memory=memory)
     LOG_SLEEP,
     MISSED_REASON,
     CHECKIN_HOUR,
-) = range(11)
+    FOOD_MEAL_TYPE,
+    EDIT_FOOD_FIELD,
+    EDIT_FOOD_VALUE,
+) = range(14)
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -108,6 +112,10 @@ async def run_weekly_review(user_id: str) -> str:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, rag.generate_weekly_review, user_id)
 
+async def run_food_analysis(image_b64: str) -> dict:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, rag.analyze_food_image, image_b64)
+
 # ── /start ────────────────────────────────────────────────────────────────
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -147,6 +155,9 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "  /checkin — Get your morning coach message\n"
         "  /log     — Log today's workout & notes\n"
         "  /missed  — Missed gym today? Get an adjusted plan\n\n"
+        "*Food & Calories 🍽️*\n"
+        "  📷 Send a photo — AI analyzes calories automatically\n"
+        "  /calories — See today's full food log & totals\n\n"
         "*Progress*\n"
         "  /history — Last 7 days of logs\n"
         "  /streak  — Your current workout streak\n"
@@ -438,6 +449,167 @@ async def cmd_review(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     review = await run_weekly_review(uid(update))
     await reply(update, review)
 
+# ── /calories — show today's food log ────────────────────────────────────
+
+async def cmd_calories(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    summary = memory.format_food_logs_today(uid(update))
+    await update.message.reply_text(
+        f"🍽️ *Today's Food Log*\n\n{summary}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+# ── Photo handler — analyze food image ───────────────────────────────────
+
+async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorised(update):
+        return
+
+    await typing(update, ctx)
+    await update.message.reply_text("📷 Analyzing your food photo… ⏳")
+
+    # Download the highest-resolution photo
+    photo = update.message.photo[-1]
+    file = await ctx.bot.get_file(photo.file_id)
+    file_bytes = await file.download_as_bytearray()
+    image_b64 = base64.b64encode(file_bytes).decode("utf-8")
+
+    result = await run_food_analysis(image_b64)
+
+    if result["calories"] == 0:
+        await update.message.reply_text(
+            "❌ Couldn't analyze the image clearly.\n\n"
+            "Try a clearer, well-lit photo — or log manually:\n"
+            "Just type: `Lunch: 2 rotis + dal = 450 kcal`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    # Save to Supabase
+    log_id = memory.save_food_log(
+        user_id=uid(update),
+        meal_name=result["meal_name"],
+        food_description=result["food_description"],
+        calories=result["calories"],
+        protein_g=result.get("protein_g", 0),
+        carbs_g=result.get("carbs_g", 0),
+        fat_g=result.get("fat_g", 0),
+        image_analyzed=True,
+        notes=result.get("notes", ""),
+    )
+
+    # Store last log_id so user can edit right after
+    ctx.user_data["last_food_log_id"] = log_id
+
+    daily = memory.get_daily_calorie_total(uid(update))
+    confidence_emoji = {"high": "✅", "medium": "⚠️", "low": "❓"}.get(result.get("confidence", "low"), "⚠️")
+
+    msg = (
+        f"📷 *Food Analyzed* {confidence_emoji}\n\n"
+        f"🍽️ *{result['meal_name']}:* {result['food_description']}\n\n"
+        f"🔥 Calories: *{result['calories']} kcal*\n"
+        f"💪 Protein: {result.get('protein_g', 0):.0f}g\n"
+        f"🌾 Carbs: {result.get('carbs_g', 0):.0f}g\n"
+        f"🫒 Fat: {result.get('fat_g', 0):.0f}g\n"
+    )
+    if result.get("notes"):
+        msg += f"\n📝 Note: {result['notes']}\n"
+    msg += f"\n📊 *Today's total so far: {daily['calories']} kcal*"
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Edit this entry", callback_data=f"editfood_{log_id}")],
+        [InlineKeyboardButton("🗑️ Delete this entry", callback_data=f"delfood_{log_id}")],
+        [InlineKeyboardButton("📋 See full day log", callback_data="show_calories")],
+    ])
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+# ── Inline button callbacks for food entries ──────────────────────────────
+
+async def food_action_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "show_calories":
+        summary = memory.format_food_logs_today(str(query.from_user.id))
+        await query.edit_message_text(
+            f"🍽️ *Today's Food Log*\n\n{summary}",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if data.startswith("delfood_"):
+        log_id = data[len("delfood_"):]
+        memory.delete_food_log(log_id)
+        daily = memory.get_daily_calorie_total(str(query.from_user.id))
+        await query.edit_message_text(
+            f"🗑️ Entry deleted.\n📊 *Today's total: {daily['calories']} kcal*",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if data.startswith("editfood_"):
+        log_id = data[len("editfood_"):]
+        ctx.user_data["editing_food_id"] = log_id
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔥 Calories",    callback_data="editfield_calories")],
+            [InlineKeyboardButton("💪 Protein (g)", callback_data="editfield_protein_g")],
+            [InlineKeyboardButton("🌾 Carbs (g)",   callback_data="editfield_carbs_g")],
+            [InlineKeyboardButton("🫒 Fat (g)",     callback_data="editfield_fat_g")],
+            [InlineKeyboardButton("🍽️ Meal name",  callback_data="editfield_meal_name")],
+            [InlineKeyboardButton("📝 Description", callback_data="editfield_food_description")],
+        ])
+        await query.edit_message_text(
+            "What do you want to edit?",
+            reply_markup=keyboard,
+        )
+
+async def editfield_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    field = query.data[len("editfield_"):]
+    ctx.user_data["editing_food_field"] = field
+    labels = {
+        "calories": "new calorie count (e.g. 450)",
+        "protein_g": "new protein in grams (e.g. 30)",
+        "carbs_g": "new carbs in grams (e.g. 55)",
+        "fat_g": "new fat in grams (e.g. 12)",
+        "meal_name": "meal name (Breakfast / Lunch / Dinner / Snack)",
+        "food_description": "food description",
+    }
+    await query.edit_message_text(f"Enter the {labels.get(field, field)}:")
+    return EDIT_FOOD_VALUE
+
+async def editfood_value(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    log_id = ctx.user_data.get("editing_food_id")
+    field  = ctx.user_data.get("editing_food_field")
+    value  = update.message.text.strip()
+
+    if not log_id or not field:
+        await update.message.reply_text("Nothing to edit. Send a food photo first.")
+        return ConversationHandler.END
+
+    numeric_fields = {"calories", "protein_g", "carbs_g", "fat_g"}
+    if field in numeric_fields:
+        try:
+            value = int(value) if field == "calories" else float(value)
+        except ValueError:
+            await update.message.reply_text("Please enter a valid number.")
+            return EDIT_FOOD_VALUE
+
+    memory.update_food_log(log_id, **{field: value})
+    daily = memory.get_daily_calorie_total(uid(update))
+
+    await update.message.reply_text(
+        f"✅ Updated! 📊 *Today's total: {daily['calories']} kcal*",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    ctx.user_data.pop("editing_food_id", None)
+    ctx.user_data.pop("editing_food_field", None)
+    return ConversationHandler.END
+
+# ── /help ─────────────────────────────────────────────────────────────────
+# (updated below — keeping original position, just adding to the text)
+
 # ── General message handler ───────────────────────────────────────────────
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -582,11 +754,21 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", goal_cancel)],
     )
 
+    # ── Edit food conversation
+    editfood_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(editfield_callback, pattern="^editfield_")],
+        states={
+            EDIT_FOOD_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editfood_value)],
+        },
+        fallbacks=[CommandHandler("cancel", log_cancel)],
+    )
+
     # ── Register all handlers
     app.add_handler(goal_conv)
     app.add_handler(log_conv)
     app.add_handler(missed_conv)
     app.add_handler(reminder_conv)
+    app.add_handler(editfood_conv)
 
     app.add_handler(CommandHandler("start",       cmd_start))
     app.add_handler(CommandHandler("help",        cmd_help))
@@ -595,7 +777,13 @@ def main() -> None:
     app.add_handler(CommandHandler("history",     cmd_history))
     app.add_handler(CommandHandler("streak",      cmd_streak))
     app.add_handler(CommandHandler("review",      cmd_review))
+    app.add_handler(CommandHandler("calories",    cmd_calories))
 
+    # Food action buttons (edit/delete/show)
+    app.add_handler(CallbackQueryHandler(food_action_callback, pattern="^(editfood_|delfood_|show_calories)"))
+
+    # Photo handler — must be before text handler
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(handle_error)
 
