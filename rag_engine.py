@@ -56,11 +56,11 @@ class FitnessCoachRAG:
         api_key = os.getenv("OPENAI_API_KEY", "")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set!")
-        self.client = OpenAI(api_key=api_key)
+        self.openai = OpenAI(api_key=api_key)
 
         # ChromaDB
-        self.client     = chromadb.PersistentClient(path=db_path)
-        self.collection = self.client.get_collection(COLLECTION)
+        self.chroma     = chromadb.PersistentClient(path=db_path)
+        self.collection = self.chroma.get_collection(COLLECTION)
 
         # Embedder
         self.embedder = SentenceTransformer(EMBED_MODEL)
@@ -141,7 +141,7 @@ class FitnessCoachRAG:
     # ── Call Groq API ─────────────────────────────────────────────────────
 
     def _call_groq(self, messages: list[dict], temperature: float = TEMPERATURE) -> str:
-        response = self.client.chat.completions.create(
+        response = self.openai.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,
@@ -174,7 +174,7 @@ class FitnessCoachRAG:
         context  = self._retrieve(question)
         messages = self._build_messages(question, context, user_id)
 
-        stream = self.client.chat.completions.create(
+        stream = self.openai.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=TEMPERATURE,
@@ -329,7 +329,7 @@ class FitnessCoachRAG:
         )
 
         try:
-            response = self.client.chat.completions.create(
+            response = self.openai.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {
