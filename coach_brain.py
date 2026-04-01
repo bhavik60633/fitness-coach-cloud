@@ -34,6 +34,7 @@ INTENT_TYPES = {
     "greeting":      ["hi", "hello", "hey", "sup", "good morning", "namaste"],
     "gratitude":     ["thanks", "thank you", "shukriya", "dhanyawad", "great", "awesome"],
     "accountability":["did i", "how many", "streak", "missed", "skip", "kitna"],
+    "reminder_request": ["remind", "reminder", "yaad", "notify", "alert", "every hour", "every day", "har ghante", "har din"],
 }
 
 

@@ -82,6 +82,30 @@ class SmartScheduler:
             )
             logger.info(f"Set weekly review for {user_id_str} on Sundays 20:00 IST")
 
+        # ── Water reminders: every 2 hours during waking hours (8am-10pm IST) ──
+        water_name = f"water_remind_{user_id_str}"
+        existing = job_queue.get_jobs_by_name(water_name)
+        if not existing:
+            # IST waking hours: 8am (2:30 UTC) to 10pm (16:30 UTC), every 2 hours
+            water_times = [
+                dtime(hour=2, minute=30),    # 8:00 AM IST
+                dtime(hour=4, minute=30),    # 10:00 AM IST
+                dtime(hour=6, minute=30),    # 12:00 PM IST
+                dtime(hour=8, minute=30),    # 2:00 PM IST
+                dtime(hour=10, minute=30),   # 4:00 PM IST
+                dtime(hour=12, minute=30),   # 6:00 PM IST
+                dtime(hour=14, minute=30),   # 8:00 PM IST
+                dtime(hour=16, minute=30),   # 10:00 PM IST
+            ]
+            for i, wt in enumerate(water_times):
+                job_queue.run_daily(
+                    self._water_reminder,
+                    time=wt,
+                    name=f"{water_name}_{i}",
+                    data={"user_id_int": user_id_int, "user_id_str": user_id_str},
+                )
+            logger.info(f"Set water reminders for {user_id_str} every 2 hours (8am-10pm IST)")
+
     # ── Followup Queue Processor ─────────────────────────────────────────
 
     async def _process_followups(self, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -201,3 +225,33 @@ class SmartScheduler:
         """
         self.followup_engine.cancel_type(user_id, "streak_check")
         self.followup_engine.cancel_type(user_id, "meal_reminder")
+
+    # ── Water Reminder ───────────────────────────────────────────────────
+
+    async def _water_reminder(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Send varied water reminders every 2 hours.
+        Each time picks a different message to keep it fresh.
+        """
+        import random
+        data = context.job.data
+        user_id_int = data["user_id_int"]
+
+        messages = [
+            "💧 Pani pi le bhai! Stay hydrated — aim for a full glass right now.",
+            "💧 Water check! Aaj kitna pani piya? One glass right now! 🥤",
+            "💧 Hydration reminder! Paani ka time ho gaya. Drink up! 💪",
+            "💧 Hey! Pani piya? Muscles need water to recover. Go drink! 🏋️",
+            "💧 2 hours ho gaye — ek glass paani pi le! Your body will thank you.",
+            "💧 Quick reminder: WATER! 🥛 Target 2-3 liters today.",
+            "💧 Bhai paani! Dehydration kills gains. Drink a glass NOW! 💪",
+            "💧 Hydration time! Har 2 ghante = 1 glass. You got this! 🚰",
+        ]
+
+        try:
+            msg = random.choice(messages)
+            await context.bot.send_message(chat_id=user_id_int, text=msg)
+            logger.info(f"Sent water reminder to {user_id_int}")
+        except Exception as exc:
+            logger.error(f"Water reminder error: {exc}")
+
