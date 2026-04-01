@@ -305,3 +305,166 @@ class CoachMemory:
             f"Protein: {total['protein_g']:.0f}g | Carbs: {total['carbs_g']:.0f}g | Fat: {total['fat_g']:.0f}g"
         )
         return "\n".join(lines)
+
+    # ══════════════════════════════════════════════════════════════════════
+    # BRAIN INTEGRATION — Coach thoughts, follow-ups, and pattern tracking
+    # ══════════════════════════════════════════════════════════════════════
+
+    # ── Coach Thoughts (brain's reasoning chain) ─────────────────────────
+
+    def save_coach_thought(
+        self,
+        user_id: str,
+        thought_type: str,
+        content: str,
+        context_snapshot: str = "",
+    ) -> None:
+        """Persist a single thought from the brain's reasoning chain."""
+        self.db.table("coach_thoughts").insert({
+            "user_id": user_id,
+            "thought_type": thought_type,
+            "content": content,
+            "context_snapshot": context_snapshot,
+        }).execute()
+
+    def get_recent_thoughts(
+        self, user_id: str, limit: int = 10
+    ) -> list[dict]:
+        """Get the brain's recent thoughts for a user."""
+        result = (
+            self.db.table("coach_thoughts")
+            .select("thought_type, content, created_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = result.data if result.data else []
+        return list(reversed(rows))
+
+    # ── Follow-up Queue ──────────────────────────────────────────────────
+
+    def queue_followup(
+        self,
+        user_id: str,
+        followup_type: str,
+        message: str,
+        scheduled_at: str,
+        trigger_reason: str = "",
+        priority: int = 5,
+    ) -> None:
+        """Add a proactive follow-up to the queue."""
+        self.db.table("followup_queue").insert({
+            "user_id": user_id,
+            "followup_type": followup_type,
+            "message": message,
+            "scheduled_at": scheduled_at,
+            "trigger_reason": trigger_reason,
+            "priority": priority,
+        }).execute()
+
+    def get_due_followups(self) -> list[dict]:
+        """Get all follow-ups that are due (scheduled_at <= now, not yet sent)."""
+        now = datetime.utcnow().isoformat()
+        result = (
+            self.db.table("followup_queue")
+            .select("*")
+            .eq("sent", False)
+            .lte("scheduled_at", now)
+            .order("priority", desc=False)
+            .limit(20)
+            .execute()
+        )
+        return result.data if result.data else []
+
+    def mark_followup_sent(self, followup_id: str) -> None:
+        """Mark a follow-up as sent."""
+        self.db.table("followup_queue").update({
+            "sent": True,
+            "sent_at": datetime.utcnow().isoformat(),
+        }).eq("id", followup_id).execute()
+
+    def cancel_followups(self, user_id: str, followup_type: str) -> None:
+        """Cancel all pending follow-ups of a specific type."""
+        self.db.table("followup_queue").update({
+            "sent": True,
+            "sent_at": datetime.utcnow().isoformat(),
+        }).eq("user_id", user_id).eq("followup_type", followup_type).eq(
+            "sent", False
+        ).execute()
+
+    def cancel_all_followups(self, user_id: str) -> None:
+        """Cancel all pending follow-ups for a user."""
+        self.db.table("followup_queue").update({
+            "sent": True,
+            "sent_at": datetime.utcnow().isoformat(),
+        }).eq("user_id", user_id).eq("sent", False).execute()
+
+    def get_last_followup_time(
+        self, user_id: str, followup_type: str
+    ) -> str | None:
+        """When was the last follow-up of this type sent or queued?"""
+        result = (
+            self.db.table("followup_queue")
+            .select("scheduled_at")
+            .eq("user_id", user_id)
+            .eq("followup_type", followup_type)
+            .order("scheduled_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data and result.data[0]:
+            return result.data[0].get("scheduled_at")
+        return None
+
+    def count_pending_followups(self, user_id: str) -> int:
+        """Count unsent follow-ups for a user."""
+        result = (
+            self.db.table("followup_queue")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .eq("sent", False)
+            .execute()
+        )
+        return result.count if result.count else 0
+
+    # ── User Patterns ────────────────────────────────────────────────────
+
+    def upsert_pattern(
+        self,
+        user_id: str,
+        pattern_type: str,
+        pattern_data: str,
+        confidence: float = 0.5,
+    ) -> None:
+        """Insert or update a behavioral pattern."""
+        self.db.table("user_patterns").upsert({
+            "user_id": user_id,
+            "pattern_type": pattern_type,
+            "pattern_data": pattern_data,
+            "confidence": confidence,
+            "last_updated": datetime.utcnow().isoformat(),
+        }).execute()
+
+    def get_pattern(self, user_id: str, pattern_type: str) -> dict | None:
+        """Retrieve a specific pattern."""
+        result = (
+            self.db.table("user_patterns")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("pattern_type", pattern_type)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return result.data[0]
+        return None
+
+    def get_all_patterns(self, user_id: str) -> list[dict]:
+        """Retrieve all learned patterns for a user."""
+        result = (
+            self.db.table("user_patterns")
+            .select("*")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return result.data if result.data else []

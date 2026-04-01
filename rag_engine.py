@@ -6,6 +6,7 @@ ChromaDB stays embedded (runs on Render disk).
 """
 
 import json
+import logging
 import os
 from typing import Generator
 
@@ -17,6 +18,9 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 
 from memory import CoachMemory
+from coach_brain import CoachBrain
+
+logger = logging.getLogger(__name__)
 
 # ── Config ──────────────────────────────────────────────────────────────────
 DB_PATH      = os.getenv("CHROMA_DB_PATH", "./chroma_db")
@@ -52,6 +56,9 @@ class FitnessCoachRAG:
         self.model   = model
         self.memory  = memory or CoachMemory()
 
+        # 🧠 Brain — multi-step reasoning engine (Claw Code integration)
+        self.brain = CoachBrain(self.memory)
+
         # OpenAI client
         api_key = os.getenv("OPENAI_API_KEY", "")
         if not api_key:
@@ -66,7 +73,7 @@ class FitnessCoachRAG:
         self.embedder = SentenceTransformer(EMBED_MODEL)
 
         count = self.collection.count()
-        print(f"✅  RAG engine ready — {count:,} chunks in knowledge base")
+        print(f"✅  RAG engine ready — {count:,} chunks in knowledge base (brain active)")
 
     # ── Retrieval ─────────────────────────────────────────────────────────
 
@@ -91,9 +98,14 @@ class FitnessCoachRAG:
         context: str,
         user_id: str,
         include_memory: bool = True,
+        brain_context: str = "",
     ) -> list[dict]:
 
         system_parts = [BASE_SYSTEM]
+
+        # 🧠 Brain's situational awareness (NEW — Claw Code integration)
+        if brain_context:
+            system_parts.append(brain_context)
 
         if include_memory and user_id:
             context_lines = []
@@ -153,16 +165,39 @@ class FitnessCoachRAG:
     # ── Synchronous query ─────────────────────────────────────────────────
 
     def query(self, question: str, user_id: str = "default") -> str:
+        # 🧠 Step 1: Brain reasons through the situation
+        brain_ctx = ""
+        reasoning_chain = None
+        try:
+            brain_ctx = self.brain.build_brain_context(question, user_id)
+            reasoning_chain = self.brain.reason(question, user_id)
+            logger.info(
+                f"Brain: intents={reasoning_chain.detected_intents}, "
+                f"decision={reasoning_chain.final_decision}, "
+                f"followups={len(reasoning_chain.followup_actions)}"
+            )
+        except Exception as exc:
+            logger.warning(f"Brain reasoning failed (falling back): {exc}")
+
+        # Step 2: Retrieve document context
         context  = self._retrieve(question)
-        messages = self._build_messages(question, context, user_id)
+
+        # Step 3: Build messages WITH brain context
+        messages = self._build_messages(question, context, user_id, brain_context=brain_ctx)
         answer   = self._call_groq(messages)
 
-        # Save to memory
+        # Step 4: Save to memory
         if user_id:
             self.memory.save_message(user_id, "user",  question)
             self.memory.save_message(user_id, "coach", answer)
 
+        # Step 5: Return answer + reasoning chain for follow-up scheduling
+        self._last_reasoning_chain = reasoning_chain
         return answer
+
+    def get_last_reasoning_chain(self):
+        """Get the reasoning chain from the last query (for follow-up scheduling)."""
+        return getattr(self, "_last_reasoning_chain", None)
 
     # ── Streaming query ───────────────────────────────────────────────────
 
@@ -171,8 +206,17 @@ class FitnessCoachRAG:
         question: str,
         user_id: str = "default",
     ) -> Generator[str, None, None]:
+        # 🧠 Brain thinks first
+        brain_ctx = ""
+        reasoning_chain = None
+        try:
+            brain_ctx = self.brain.build_brain_context(question, user_id)
+            reasoning_chain = self.brain.reason(question, user_id)
+        except Exception as exc:
+            logger.warning(f"Brain reasoning failed in stream (falling back): {exc}")
+
         context  = self._retrieve(question)
-        messages = self._build_messages(question, context, user_id)
+        messages = self._build_messages(question, context, user_id, brain_context=brain_ctx)
 
         stream = self.openai.chat.completions.create(
             model=self.model,
@@ -193,6 +237,8 @@ class FitnessCoachRAG:
         if user_id and full_answer:
             self.memory.save_message(user_id, "user",  question)
             self.memory.save_message(user_id, "coach", full_answer)
+
+        self._last_reasoning_chain = reasoning_chain
 
     # ── Adaptive plan query ───────────────────────────────────────────────
 

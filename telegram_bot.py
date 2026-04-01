@@ -33,6 +33,8 @@ from telegram.ext import (
 
 from memory import CoachMemory
 from rag_engine import FitnessCoachRAG
+from followup_engine import FollowupEngine, PatternTracker
+from smart_scheduler import SmartScheduler
 
 # ── Load environment ──────────────────────────────────────────────────────
 load_dotenv()
@@ -50,9 +52,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Shared memory + RAG ───────────────────────────────────────────────────
+# ── Shared memory + RAG + Brain systems ───────────────────────────────────
 memory = CoachMemory()
 rag    = FitnessCoachRAG(memory=memory)
+
+# 🧠 Claw Code integration: proactive coaching systems
+followup_engine  = FollowupEngine(memory)
+pattern_tracker  = PatternTracker(memory)
+smart_scheduler  = SmartScheduler(memory, followup_engine, rag, rag.brain)
 
 # ── ConversationHandler states ────────────────────────────────────────────
 (
@@ -618,16 +625,32 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     question = update.message.text.strip()
+    user_id = uid(update)
     await typing(update, ctx)
-    logger.info(f"[{uid(update)}] {question[:80]}")
+    logger.info(f"[{user_id}] {question[:80]}")
+
+    # 🧠 Cancel stale follow-ups (user is active now)
+    smart_scheduler.on_user_message(user_id)
 
     try:
-        answer = await run_rag(question, uid(update))
+        answer = await run_rag(question, user_id)
+
+        # 🧠 Queue any follow-ups the brain planned during reasoning
+        chain = rag.get_last_reasoning_chain()
+        if chain and chain.followup_actions:
+            queued = followup_engine.queue_followups(user_id, chain.followup_actions)
+            if queued:
+                logger.info(f"Queued {queued} follow-ups for {user_id}")
+
     except Exception as exc:
         logger.error(f"RAG error: {exc}")
         answer = f"⚠️ Something went wrong: {exc}"
 
     await reply(update, answer)
+
+    # 🧠 Set up smart scheduler jobs on first interaction
+    if ctx.job_queue and AUTHORIZED_USER:
+        smart_scheduler.setup_jobs(ctx.job_queue, int(AUTHORIZED_USER))
 
 # ── Scheduled daily check-in ──────────────────────────────────────────────
 
@@ -804,7 +827,12 @@ def main() -> None:
                 f"at {rem['hour']:02d}:{rem['minute']:02d}"
             )
 
-    logger.info("🤖 Fitness Coach Bot is running on CLOUD … (24/7)")
+    # ── Set up smart scheduler for known user
+    if AUTHORIZED_USER:
+        smart_scheduler.setup_jobs(app.job_queue, int(AUTHORIZED_USER))
+        logger.info(f"🧠 Smart scheduler active for user {AUTHORIZED_USER}")
+
+    logger.info("🤖 Fitness Coach Bot is running on CLOUD … (24/7) [Brain + Proactive Mode]")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
