@@ -90,7 +90,7 @@ smart_scheduler  = SmartScheduler(memory, followup_engine, rag, rag.brain)
     FOOD_MEAL_TYPE,
     EDIT_FOOD_FIELD,
     EDIT_FOOD_VALUE,
-) = range(25)
+) = range(24)
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
