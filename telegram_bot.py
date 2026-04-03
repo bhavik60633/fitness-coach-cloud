@@ -63,10 +63,23 @@ smart_scheduler  = SmartScheduler(memory, followup_engine, rag, rag.brain)
 
 # ── ConversationHandler states ────────────────────────────────────────────
 (
+    # ETF Onboarding flow
+    OB_GOAL_TYPE,
+    OB_CURRENT_WEIGHT,
+    OB_TARGET_WEIGHT,
+    OB_DAYS,
+    OB_AGE,
+    OB_TRAINING_HISTORY,
+    OB_CALORIE_TRACKING,
+    OB_SLEEP,
+    OB_OBSTACLES,
+    OB_CONFIRM,
+    # Legacy setgoal
     GOAL_TARGET_WEIGHT,
     GOAL_CURRENT_WEIGHT,
     GOAL_DAYS,
     GOAL_CONFIRM,
+    # Daily log
     LOG_WORKOUT_DONE,
     LOG_NOTES,
     LOG_WEIGHT,
@@ -77,7 +90,7 @@ smart_scheduler  = SmartScheduler(memory, followup_engine, rag, rag.brain)
     FOOD_MEAL_TYPE,
     EDIT_FOOD_FIELD,
     EDIT_FOOD_VALUE,
-) = range(14)
+) = range(25)
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -125,30 +138,279 @@ async def run_food_analysis(image_b64: str) -> dict:
 
 # ── /start ────────────────────────────────────────────────────────────────
 
-async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
     n = name(update)
     profile = memory.get_profile(uid(update))
     if profile and profile.get("goal_summary"):
         goal = profile["goal_summary"]
+        compliance = profile.get("compliance_score") or 0
         await update.message.reply_text(
-            f"Welcome back, {n}! 💪\n\n"
-            f"I remember everything — we're still working towards:\n"
-            f"🎯 *{goal}*\n\n"
-            f"What's on your mind? Just send me a message!\n"
-            f"Type /help to see all commands.",
+            f"Welcome back, {n}.\n\n"
+            f"Goal: *{goal}*\n"
+            f"Compliance: *{compliance}%*\n\n"
+            f"What do you need? Send a message or use /help.",
             parse_mode=ParseMode.MARKDOWN,
         )
+        return ConversationHandler.END
     else:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Fat Loss",            callback_data="goal_fat_loss")],
+            [InlineKeyboardButton("Muscle Gain",         callback_data="goal_muscle_gain")],
+            [InlineKeyboardButton("Body Recomposition",  callback_data="goal_recomp")],
+        ])
         await update.message.reply_text(
-            f"Hey {n}! 🏋️ I'm your personal AI fitness coach.\n\n"
-            f"I've studied all your fitness documents — workouts, diet plans, "
-            f"sleep guides and more. I'll remember *every conversation* and "
-            f"adapt your plan as you go.\n\n"
-            f"To get started, let's set your goal:\n"
-            f"👉 Type /setgoal\n\n"
-            f"Or just ask me anything — I'm here!",
+            f"I'm your ETF Personal Coach, {n}.\n\n"
+            f"Before I can coach you, I need your baseline data.\n"
+            f"This takes 2 minutes. Answer honestly.\n\n"
+            f"*What is your primary goal?*",
             parse_mode=ParseMode.MARKDOWN,
+            reply_markup=keyboard,
         )
+        return OB_GOAL_TYPE
+
+# ── ETF Onboarding flow ────────────────────────────────────────────────────
+
+async def ob_goal_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    goal_map = {
+        "goal_fat_loss":    "fat_loss",
+        "goal_muscle_gain": "muscle_gain",
+        "goal_recomp":      "recomp",
+    }
+    ctx.user_data["goal_type"] = goal_map.get(query.data, "fat_loss")
+    await query.edit_message_text(
+        "What is your *current weight* in kg?\n_(e.g. 87)_",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return OB_CURRENT_WEIGHT
+
+async def ob_current_weight(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        ctx.user_data["current_weight"] = float(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("Enter a number in kg, e.g. 87")
+        return OB_CURRENT_WEIGHT
+    await update.message.reply_text(
+        "What is your *target weight* in kg?\n_(e.g. 75)_",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return OB_TARGET_WEIGHT
+
+async def ob_target_weight(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        ctx.user_data["target_weight"] = float(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("Enter a number in kg, e.g. 75")
+        return OB_TARGET_WEIGHT
+    await update.message.reply_text(
+        "How many *days* to reach this goal?\n_(e.g. 90)_",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return OB_DAYS
+
+async def ob_days(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        ctx.user_data["goal_days"] = int(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("Enter number of days, e.g. 90")
+        return OB_DAYS
+    await update.message.reply_text("How old are you?\n_(e.g. 25)_")
+    return OB_AGE
+
+async def ob_age(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        ctx.user_data["age"] = int(update.message.text.strip())
+    except ValueError:
+        await update.message.reply_text("Enter your age, e.g. 25")
+        return OB_AGE
+    await update.message.reply_text(
+        "Describe your *training history* in one line.\n\n"
+        "Examples:\n"
+        "- Never trained before\n"
+        "- Trained 2 years but inconsistent, 1 year off gym\n"
+        "- Training consistently 3 years",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return OB_TRAINING_HISTORY
+
+async def ob_training_history(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.strip()
+    ctx.user_data["training_history"] = text
+    tl = text.lower()
+    if any(w in tl for w in ["never", "beginner", "first time", "no experience"]):
+        ctx.user_data["training_level"] = "beginner"
+    elif any(w in tl for w in ["inconsistent", "off", "stopped", "1 year", "2 year", "not consistent"]):
+        ctx.user_data["training_level"] = "beginner"
+    elif any(w in tl for w in ["3 year", "4 year", "5 year", "consistent", "advanced"]):
+        ctx.user_data["training_level"] = "intermediate"
+    else:
+        ctx.user_data["training_level"] = "beginner"
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("No — not tracking calories", callback_data="cal_no")],
+        [InlineKeyboardButton("Yes — I track my calories",  callback_data="cal_yes")],
+    ])
+    await update.message.reply_text(
+        "Are you currently *tracking your calories?*",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard,
+    )
+    return OB_CALORIE_TRACKING
+
+async def ob_calorie_tracking(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    ctx.user_data["calories_tracking"] = 1 if query.data == "cal_yes" else 0
+    cw = ctx.user_data.get("current_weight", 80)
+    maintenance = round(cw * 30)
+    if ctx.user_data.get("goal_type") == "fat_loss":
+        ctx.user_data["calorie_target"] = maintenance - 500
+    elif ctx.user_data.get("goal_type") == "muscle_gain":
+        ctx.user_data["calorie_target"] = maintenance + 300
+    else:
+        ctx.user_data["calorie_target"] = maintenance
+
+    await query.edit_message_text(
+        "What time do you *wake up* and *go to sleep?*\n\n"
+        "Reply in this format:\n`wake 06:30 / sleep 22:30`",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return OB_SLEEP
+
+async def ob_sleep(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text.strip().lower()
+    times = re.findall(r"\d{1,2}:\d{2}", text)
+    if len(times) >= 2:
+        ctx.user_data["sleep_wake_time"] = times[0]
+        ctx.user_data["sleep_bed_time"]  = times[1]
+    elif len(times) == 1:
+        ctx.user_data["sleep_wake_time"] = times[0]
+        ctx.user_data["sleep_bed_time"]  = "23:00"
+    else:
+        ctx.user_data["sleep_wake_time"] = "07:00"
+        ctx.user_data["sleep_bed_time"]  = "23:00"
+
+    await update.message.reply_text(
+        "What is your *biggest obstacle* right now?\n\n"
+        "Be honest — motivation, no knowledge, going alone, fatigue, diet, etc.\n"
+        "_(This helps me identify your weak points)_",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return OB_OBSTACLES
+
+async def ob_obstacles(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    ctx.user_data["obstacles"] = update.message.text.strip()
+    gt   = ctx.user_data.get("goal_type", "fat_loss").replace("_", " ").title()
+    cw   = ctx.user_data.get("current_weight", "?")
+    tw   = ctx.user_data.get("target_weight", "?")
+    days = ctx.user_data.get("goal_days", "?")
+    age  = ctx.user_data.get("age", "?")
+    tl   = ctx.user_data.get("training_level", "beginner").title()
+    cal  = ctx.user_data.get("calorie_target", "?")
+    wake = ctx.user_data.get("sleep_wake_time", "?")
+    bed  = ctx.user_data.get("sleep_bed_time", "?")
+    obs  = ctx.user_data.get("obstacles", "?")
+    tracking = "Yes" if ctx.user_data.get("calories_tracking") else "No"
+
+    summary = (
+        f"*Your ETF Profile*\n\n"
+        f"Goal: {gt}\n"
+        f"Weight: {cw} kg → {tw} kg in {days} days\n"
+        f"Age: {age}\n"
+        f"Training Level: {tl}\n"
+        f"Calorie Target: {cal} kcal/day\n"
+        f"Tracking calories: {tracking}\n"
+        f"Sleep: Wake {wake} / Bed {bed}\n"
+        f"Main obstacle: {obs}"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Confirm — Start Coaching", callback_data="ob_confirm")],
+        [InlineKeyboardButton("Start Over",               callback_data="ob_restart")],
+    ])
+    await update.message.reply_text(
+        summary, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard,
+    )
+    return OB_CONFIRM
+
+async def ob_confirm_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    user_id = str(query.from_user.id)
+
+    if query.data == "ob_restart":
+        await query.edit_message_text("Starting over. Send /start to begin again.")
+        return ConversationHandler.END
+
+    from datetime import date as date_cls, timedelta
+    days  = ctx.user_data.get("goal_days", 90)
+    start = date_cls.today()
+    end   = start + timedelta(days=days)
+    cw    = ctx.user_data.get("current_weight", 0)
+    tw    = ctx.user_data.get("target_weight", 0)
+    gt    = ctx.user_data.get("goal_type", "fat_loss")
+    diff  = abs(cw - tw)
+    action = "Lose" if cw > tw else "Gain"
+    goal_summary = f"{action} {diff} kg in {days} days ({cw} kg → {tw} kg)"
+
+    obs = ctx.user_data.get("obstacles", "").lower()
+    weak = []
+    if any(w in obs for w in ["motivation", "discipline", "lazy"]):
+        weak.append("motivation/discipline")
+    if any(w in obs for w in ["knowledge", "don't know", "no idea", "confused"]):
+        weak.append("knowledge gap")
+    if any(w in obs for w in ["diet", "food", "eating", "calories", "nutrition"]):
+        weak.append("nutrition")
+    if any(w in obs for w in ["tired", "fatigue", "sleep", "energy"]):
+        weak.append("fatigue/recovery")
+    if any(w in obs for w in ["alone", "no partner", "no friend"]):
+        weak.append("accountability")
+    weak_points_str = ", ".join(weak) if weak else "to be assessed"
+
+    memory.upsert_profile(
+        user_id,
+        name=query.from_user.first_name,
+        goal_type=gt,
+        current_weight=cw,
+        target_weight=tw,
+        goal_summary=goal_summary,
+        goal_start_date=start.isoformat(),
+        goal_end_date=end.isoformat(),
+        goal_days_total=days,
+        age=ctx.user_data.get("age"),
+        training_level=ctx.user_data.get("training_level", "beginner"),
+        training_history=ctx.user_data.get("training_history", ""),
+        calorie_target=ctx.user_data.get("calorie_target"),
+        calories_tracking=ctx.user_data.get("calories_tracking", 0),
+        sleep_wake_time=ctx.user_data.get("sleep_wake_time"),
+        sleep_bed_time=ctx.user_data.get("sleep_bed_time"),
+        obstacles=ctx.user_data.get("obstacles", ""),
+        weak_points=weak_points_str,
+        compliance_score=0,
+        missed_days=0,
+        behavior_flags="[]",
+    )
+
+    if not ctx.user_data.get("calories_tracking"):
+        memory.add_behavior_flag(user_id, "not_tracking_calories")
+    if "1 year" in (ctx.user_data.get("training_history") or "").lower() or \
+       "inconsistent" in (ctx.user_data.get("training_history") or "").lower():
+        memory.add_behavior_flag(user_id, "inconsistency_pattern")
+
+    await query.edit_message_text(
+        f"Profile saved.\n\n*{goal_summary}*\n\n"
+        f"Weak points: {weak_points_str}\n\n"
+        f"Use /checkin to get your first coaching message.\n"
+        f"Use /setreminder to schedule daily check-ins.",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    ctx.user_data.clear()
+    return ConversationHandler.END
+
+async def ob_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Onboarding cancelled. Send /start to begin again.")
+    ctx.user_data.clear()
+    return ConversationHandler.END
 
 # ── /help ─────────────────────────────────────────────────────────────────
 
@@ -374,19 +636,26 @@ async def log_sleep(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> int:
     log_data = {k: v for k, v in log_data.items() if v is not None}
     memory.log_today(uid(update), **log_data)
 
-    streak = memory.get_streak(uid(update))
-    done   = log_data.get("workout_done", 0)
+    streak     = memory.get_streak(uid(update))
+    compliance = memory.update_compliance_score(uid(update))
+    done       = log_data.get("workout_done", 0)
 
     if done:
+        if compliance >= 70:
+            memory.remove_behavior_flag(uid(update), "low_discipline")
         await update.message.reply_text(
-            f"✅ Log saved!\n\n"
-            f"🔥 Streak: {streak} day{'s' if streak != 1 else ''}\n\n"
-            f"Keep crushing it! 💪"
+            f"Log saved.\n\n"
+            f"Streak: {streak} day{'s' if streak != 1 else ''}\n"
+            f"Compliance: {compliance}%"
         )
     else:
+        memory.increment_missed_days(uid(update))
+        if compliance < 50:
+            memory.add_behavior_flag(uid(update), "low_discipline")
         await update.message.reply_text(
-            "📋 Log saved. Tomorrow's another day — let's get back on track!\n\n"
-            "Type /missed if you want me to adjust today's plan."
+            f"Log saved. Missed session recorded.\n"
+            f"Compliance: {compliance}%\n\n"
+            "Type /missed to get an adjusted plan."
         )
 
     ctx.user_data.clear()
@@ -734,7 +1003,25 @@ async def handle_error(update: object, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 def main() -> None:
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # ── Goal-setting conversation
+    # ── ETF Onboarding conversation
+    onboard_conv = ConversationHandler(
+        entry_points=[CommandHandler("start", cmd_start)],
+        states={
+            OB_GOAL_TYPE:        [CallbackQueryHandler(ob_goal_type, pattern="^goal_")],
+            OB_CURRENT_WEIGHT:   [MessageHandler(filters.TEXT & ~filters.COMMAND, ob_current_weight)],
+            OB_TARGET_WEIGHT:    [MessageHandler(filters.TEXT & ~filters.COMMAND, ob_target_weight)],
+            OB_DAYS:             [MessageHandler(filters.TEXT & ~filters.COMMAND, ob_days)],
+            OB_AGE:              [MessageHandler(filters.TEXT & ~filters.COMMAND, ob_age)],
+            OB_TRAINING_HISTORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, ob_training_history)],
+            OB_CALORIE_TRACKING: [CallbackQueryHandler(ob_calorie_tracking, pattern="^cal_")],
+            OB_SLEEP:            [MessageHandler(filters.TEXT & ~filters.COMMAND, ob_sleep)],
+            OB_OBSTACLES:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ob_obstacles)],
+            OB_CONFIRM:          [CallbackQueryHandler(ob_confirm_callback, pattern="^ob_")],
+        },
+        fallbacks=[CommandHandler("cancel", ob_cancel)],
+    )
+
+    # ── Goal-setting conversation (update via /setgoal)
     goal_conv = ConversationHandler(
         entry_points=[CommandHandler("setgoal", cmd_setgoal)],
         states={
@@ -787,13 +1074,13 @@ def main() -> None:
     )
 
     # ── Register all handlers
+    app.add_handler(onboard_conv)
     app.add_handler(goal_conv)
     app.add_handler(log_conv)
     app.add_handler(missed_conv)
     app.add_handler(reminder_conv)
     app.add_handler(editfood_conv)
 
-    app.add_handler(CommandHandler("start",       cmd_start))
     app.add_handler(CommandHandler("help",        cmd_help))
     app.add_handler(CommandHandler("mygoal",      cmd_mygoal))
     app.add_handler(CommandHandler("checkin",     cmd_checkin))

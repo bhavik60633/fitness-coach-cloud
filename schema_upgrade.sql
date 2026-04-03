@@ -67,3 +67,23 @@ CREATE POLICY "Service key full access" ON followup_queue
     FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Service key full access" ON user_patterns
     FOR ALL USING (true) WITH CHECK (true);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- SCHEMA UPGRADE: ETF Coach System
+-- Run this in Supabase → SQL Editor after previous upgrades
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS goal_type          TEXT;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS age                INTEGER;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS training_level     TEXT;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS training_history   TEXT;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS calorie_target     DOUBLE PRECISION;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS calories_tracking  INTEGER DEFAULT 0;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS sleep_wake_time    TEXT;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS sleep_bed_time     TEXT;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS obstacles          TEXT;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS weak_points        TEXT;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS compliance_score   DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS missed_days        INTEGER DEFAULT 0;
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS behavior_flags     TEXT DEFAULT '[]';
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS last_checkin_date  TEXT;

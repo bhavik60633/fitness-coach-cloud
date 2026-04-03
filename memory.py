@@ -468,3 +468,109 @@ class CoachMemory:
             .execute()
         )
         return result.data if result.data else []
+
+    # ── ETF User State ────────────────────────────────────────────────────
+
+    def update_compliance_score(self, user_id: str) -> float:
+        """Recalculate compliance % from last 14 days of logs."""
+        logs = self.get_recent_logs(user_id, days=14)
+        if not logs:
+            return 0.0
+        done = sum(1 for l in logs if l.get("workout_done"))
+        score = round((done / len(logs)) * 100, 1)
+        self.upsert_profile(user_id, compliance_score=score)
+        return score
+
+    def increment_missed_days(self, user_id: str) -> None:
+        profile = self.get_profile(user_id)
+        missed = (profile.get("missed_days") or 0) + 1 if profile else 1
+        self.upsert_profile(user_id, missed_days=missed)
+
+    def add_behavior_flag(self, user_id: str, flag: str) -> None:
+        """Add a flag like 'low_discipline' or 'inconsistency_pattern'."""
+        profile = self.get_profile(user_id)
+        if not profile:
+            return
+        try:
+            flags: list = json.loads(profile.get("behavior_flags") or "[]")
+        except Exception:
+            flags = []
+        if flag not in flags:
+            flags.append(flag)
+        self.upsert_profile(user_id, behavior_flags=json.dumps(flags))
+
+    def remove_behavior_flag(self, user_id: str, flag: str) -> None:
+        profile = self.get_profile(user_id)
+        if not profile:
+            return
+        try:
+            flags: list = json.loads(profile.get("behavior_flags") or "[]")
+        except Exception:
+            flags = []
+        flags = [f for f in flags if f != flag]
+        self.upsert_profile(user_id, behavior_flags=json.dumps(flags))
+
+    def get_user_state_for_prompt(self, user_id: str) -> str:
+        """Return a structured user state block for the LLM system prompt."""
+        p = self.get_profile(user_id)
+        if not p:
+            return "No profile yet — new user."
+
+        lines = []
+        if p.get("name"):
+            lines.append(f"Name: {p['name']}")
+        if p.get("goal_type"):
+            lines.append(f"Goal type: {p['goal_type'].replace('_', ' ').title()}")
+        if p.get("goal_summary"):
+            lines.append(f"Goal: {p['goal_summary']}")
+        if p.get("current_weight") and p.get("target_weight"):
+            diff = round((p["current_weight"] or 0) - (p["target_weight"] or 0), 1)
+            lines.append(
+                f"Weight: {p['current_weight']} kg → target {p['target_weight']} kg "
+                f"({diff} kg remaining)"
+            )
+        if p.get("age"):
+            lines.append(f"Age: {p['age']}")
+        if p.get("training_level"):
+            lines.append(f"Training level: {p['training_level']}")
+        if p.get("training_history"):
+            lines.append(f"Training history: {p['training_history']}")
+        if p.get("calorie_target"):
+            tracking = "tracking" if p.get("calories_tracking") else "NOT tracking"
+            lines.append(f"Calories: target {p['calorie_target']} kcal/day ({tracking})")
+        if p.get("sleep_wake_time") or p.get("sleep_bed_time"):
+            lines.append(
+                f"Sleep: bed {p.get('sleep_bed_time', '?')} / "
+                f"wake {p.get('sleep_wake_time', '?')}"
+            )
+        if p.get("obstacles"):
+            lines.append(f"Obstacles: {p['obstacles']}")
+        if p.get("weak_points"):
+            lines.append(f"Weak points: {p['weak_points']}")
+
+        compliance = p.get("compliance_score") or 0
+        missed = p.get("missed_days") or 0
+        lines.append(f"Compliance score: {compliance}% (missed days total: {missed})")
+
+        try:
+            flags: list = json.loads(p.get("behavior_flags") or "[]")
+        except Exception:
+            flags = []
+        if flags:
+            lines.append(f"Behavior flags: {', '.join(flags)}")
+
+        if p.get("goal_start_date") and p.get("goal_end_date"):
+            try:
+                start = date.fromisoformat(p["goal_start_date"])
+                end   = date.fromisoformat(p["goal_end_date"])
+                today = date.today()
+                days_done = max(0, (today - start).days)
+                days_left = max(0, (end - today).days)
+                lines.append(
+                    f"Progress: Day {days_done} of {p.get('goal_days_total', '?')} "
+                    f"({days_left} days remaining)"
+                )
+            except Exception:
+                pass
+
+        return "\n".join(lines)

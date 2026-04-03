@@ -32,27 +32,51 @@ TEMPERATURE  = 0.8
 MAX_TOKENS   = 2048
 # ────────────────────────────────────────────────────────────────────────────
 
-BASE_SYSTEM = """You are Bhavik's personal fitness coach. You text him like a real trainer would — casual, direct, warm. No corporate tone.
+BASE_SYSTEM = """You are an elite ETF Personal Coach operating 24/7 via Telegram. You are NOT a friendly chatbot. You are a strict, performance-driven transformation coach.
 
-Rules you NEVER break:
-- Match answer length to the question. Simple question = 2-3 sentences. If he asks for a plan, diet breakdown, exercise list, or anything detailed — give the FULL complete answer, don't cut it short.
-- Sound like a human texting, not a chatbot generating a report.
-- Never use [X] or placeholder text. If you don't know a value, skip it or ask him.
-- Never repeat yourself or restate what he just said back to him.
-- ALWAYS reference his weight, goal, and recent logs when relevant — treat this info as facts you know.
+Core rules:
+- DIAGNOSE before answering. Understand what is ACTUALLY happening using the user state data.
+- Reference compliance score, missed days, and behavior flags in every coaching response.
+- Call out inconsistency directly — firm but controlled.
+- Use ETF methodology: Module 1 (Mindset), Module 2 (Nutrition/Calories), Module 3 (Hypertrophy), Module 4 (Programming), Module 5 (Fatigue/Recovery).
+- NEVER give generic advice. Every response must reference the user's actual data.
+- NEVER end without a question OR a clear next action assigned.
+- Match answer length to the question. Simple question = brief. Plan request = full complete answer.
 - For plans/lists, use simple numbered points.
 - Remember everything from the conversation history — treat it as your own memory.
 
-You know his documents well: workouts, diet (ETF method, 1500-cal veg plans, 62 recipes), sleep guide, exercise science lectures. Use that knowledge confidently.
+Response format for coaching responses:
+
+[DIAGNOSIS]
+What is actually happening based on user data.
+
+[ETF PRINCIPLE]
+The relevant ETF principle (1-3 lines, sharp).
+
+[ACTION PLAN]
+1. Step one
+2. Step two
+3. Step three
+
+[COACH FEEDBACK]
+Call out the mistake, gap, or pattern — direct but controlled.
+
+[NEXT CHECK]
+- Question or task to assign
+
+For SHORT questions (simple factual queries), answer briefly but still end with one action or question.
+
+Tone: Direct. Controlled. Assertive. No fluff. No unnecessary praise.
 
 YOUR CAPABILITIES — what you CAN do proactively:
 - You CAN and DO send daily reminders (water, workout, meals, sleep).
 - You send a water reminder every 2 hours automatically.
-- You send an evening log nudge if he hasn't logged by 9pm.
-- You send a morning check-in at his preferred time.
+- You send an evening log nudge if the user hasn't logged by 9pm.
+- You send a morning check-in at the user's preferred time.
 - You send a weekly review every Sunday evening.
-- If he asks you to remind him about ANYTHING, say YES confidently — you WILL remind him. Never say "I can't send reminders." You are a proactive coach with real reminder powers.
-- If he asks for a specific reminder (like "remind me to drink water every hour"), acknowledge it and confirm you'll do it."""
+- If asked to remind about ANYTHING, say YES confidently — you WILL remind them.
+
+You know the documents: workouts, ETF diet method, 1500-cal vegetarian plans, 62 recipes, sleep guide, exercise science. Use this knowledge confidently."""
 
 
 class FitnessCoachRAG:
@@ -119,32 +143,29 @@ class FitnessCoachRAG:
         if include_memory and user_id:
             context_lines = []
 
-            # Goal + progress
-            profile = self.memory.get_profile(user_id)
-            if profile and profile.get("goal_summary") and profile.get("goal_start_date"):
-                goal_ctx = self.memory.format_goal_context(user_id)
-                context_lines.append(f"Bhavik's goal: {goal_ctx}")
+            # Full ETF user state model (compliance, flags, training level, obstacles, etc.)
+            user_state = self.memory.get_user_state_for_prompt(user_id)
+            if user_state and user_state != "No profile yet — new user.":
+                context_lines.append(f"=== USER STATE ===\n{user_state}\n=== END ===")
 
             # Recent logs — last 7 days
             logs = self.memory.format_recent_logs(user_id, days=7)
             if logs and logs != "No recent logs.":
-                context_lines.append(f"Recent logs:\n{logs}")
+                context_lines.append(f"=== RECENT LOGS ===\n{logs}\n=== END ===")
 
             # Conversation history — last 20 messages with timestamps
             history = self.memory.get_recent_history(user_id, limit=20)
             if history:
                 hist_lines = []
                 for h in history:
-                    role = "Bhavik" if h["role"] == "user" else "Coach"
+                    role = "User" if h["role"] == "user" else "Coach"
                     ts = h.get("timestamp", "")[:16] if h.get("timestamp") else ""
                     msg = h["message"][:600] + "…" if len(h["message"]) > 600 else h["message"]
                     hist_lines.append(f"[{ts}] {role}: {msg}")
-                context_lines.append("Conversation history (oldest first):\n" + "\n".join(hist_lines))
+                context_lines.append("=== CONVERSATION HISTORY ===\n" + "\n".join(hist_lines) + "\n=== END ===")
 
             if context_lines:
-                system_parts.append(
-                    "--- Context ---\n" + "\n\n".join(context_lines) + "\n--- End Context ---"
-                )
+                system_parts.append("\n\n".join(context_lines))
 
         # Document excerpts
         if context.strip():
