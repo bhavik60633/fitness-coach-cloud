@@ -35,6 +35,7 @@ from memory import CoachMemory
 from rag_engine import FitnessCoachRAG
 from followup_engine import FollowupEngine, PatternTracker
 from smart_scheduler import SmartScheduler
+from conversation_exporter import export_conversations
 
 # ── Load environment ──────────────────────────────────────────────────────
 load_dotenv()
@@ -920,6 +921,17 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
     # 🧠 Set up smart scheduler jobs on first interaction
     if ctx.job_queue and AUTHORIZED_USER:
         smart_scheduler.setup_jobs(ctx.job_queue, int(AUTHORIZED_USER))
+
+    # Export conversation to Obsidian every 10 messages (runs in background)
+    try:
+        total = memory.get_all_history_count(user_id)
+        if total % 10 == 0:
+            asyncio.get_event_loop().run_in_executor(
+                None, export_conversations, memory, user_id, 30
+            )
+            logger.info(f"Triggered conversation export at {total} messages")
+    except Exception as exc:
+        logger.warning(f"Conversation export skipped: {exc}")
 
 # ── Scheduled daily check-in ──────────────────────────────────────────────
 
