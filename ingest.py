@@ -180,20 +180,23 @@ def ingest(base_dirs: list[str], db_path: str = DB_PATH, obsidian_vault: str = O
 # ---- Entry point ------------------------------------------------------------
 if __name__ == "__main__":
     script_dir = Path(__file__).parent.resolve()
-    local_docs  = script_dir / "docs"           # cloud/docs/  (in repo, used on Render)
-    diy_fitness = script_dir.parent.parent       # local dev: DIY fitness/
+    local_docs  = script_dir / "docs"        # cloud/docs/ — PDFs in repo
+    repo_vault  = script_dir / "vault"       # cloud/vault/ — Obsidian notes in repo
+    diy_fitness = script_dir.parent.parent   # local dev: DIY fitness/
 
     if local_docs.exists():
-        # Running on Render / Docker — PDFs are inside cloud/docs/
+        # Running on Railway/Docker — PDFs in docs/, notes in vault/
         dirs = [
             str(local_docs),
             str(local_docs / "diet planss"),
         ]
+        vault = str(repo_vault) if repo_vault.exists() else OBSIDIAN_VAULT
     else:
-        # Running locally — PDFs are in the parent DIY fitness folder
+        # Running locally — PDFs in DIY fitness folder, notes in local Obsidian
         dirs = [
             str(diy_fitness / "Fitness Coach Details"),
             str(diy_fitness / "diet planss"),
         ]
+        vault = OBSIDIAN_VAULT
 
-    ingest(dirs, obsidian_vault=OBSIDIAN_VAULT)
+    ingest(dirs, obsidian_vault=vault)
