@@ -82,6 +82,27 @@ CREATE TABLE IF NOT EXISTS food_logs (
 CREATE INDEX IF NOT EXISTS idx_food_logs_user_date
     ON food_logs (user_id, log_date DESC);
 
+-- 6. Conversation notes (structured daily summaries for RAG context)
+CREATE TABLE IF NOT EXISTS conversation_notes (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     TEXT      NOT NULL,
+    note_date   TEXT      NOT NULL,   -- ISO date "YYYY-MM-DD"
+    topics      TEXT,                 -- comma-separated topics detected
+    content     TEXT      NOT NULL,   -- full markdown note content
+    msg_count   INTEGER   DEFAULT 0,
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, note_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_notes_user
+    ON conversation_notes (user_id, note_date DESC);
+
+ALTER TABLE conversation_notes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Service key full access" ON conversation_notes;
+CREATE POLICY "Service key full access" ON conversation_notes
+    FOR ALL USING (true) WITH CHECK (true);
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Enable Row Level Security (optional but recommended)
 -- ═══════════════════════════════════════════════════════════════════════════

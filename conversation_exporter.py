@@ -2,64 +2,56 @@
 """
 conversation_exporter.py
 
-Exports Supabase conversations into structured Obsidian markdown notes.
-Each day gets its own note, tagged by topic, linked to the graph.
+Exports Supabase conversations into structured daily notes.
+
+Storage strategy:
+  - PRIMARY: saves to Supabase `conversation_notes` table (survives Railway restarts)
+  - SECONDARY: also writes to Obsidian vault if OBSIDIAN_VAULT_PATH is accessible
+
+These notes are then ingested into ChromaDB so the agent can search full history.
 
 Run manually:   python conversation_exporter.py
-Auto-trigger:   called from telegram_bot.py after each session
+Auto-trigger:   called from telegram_bot.py every 10 messages
 """
 
 import os
-import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
 
-OBSIDIAN_VAULT = os.getenv(
-    "OBSIDIAN_VAULT_PATH",
-    r"C:\Users\PC\OneDrive\Documents\Obsidian Vault"
-)
-CONVERSATIONS_DIR = Path(OBSIDIAN_VAULT) / "Conversations"
+OBSIDIAN_VAULT = os.getenv("OBSIDIAN_VAULT_PATH", "")
+CONVERSATIONS_DIR = Path(OBSIDIAN_VAULT) / "Conversations" if OBSIDIAN_VAULT else None
 
-# Topic keyword map — message -> tag
+# Topic keyword map
 TOPIC_KEYWORDS = {
     "Workout":    ["workout", "train", "exercise", "session", "gym", "lift", "reps", "sets", "squat", "bench", "deadlift", "push", "pull"],
     "Nutrition":  ["eat", "food", "calories", "protein", "carbs", "fat", "meal", "diet", "recipe", "macro", "calorie", "hungry", "snack"],
     "Sleep":      ["sleep", "rest", "tired", "fatigue", "bed", "wake", "hours", "recovery", "insomnia"],
     "Weight":     ["weight", "kg", "scale", "fat loss", "cut", "bulk", "lean", "body"],
-    "Motivation": ["motivat", "discipline", "mindset", "habit", "goal", "streak", "miss", "skip", "lazy", "tired"],
+    "Motivation": ["motivat", "discipline", "mindset", "habit", "goal", "streak", "miss", "skip", "lazy"],
     "Progress":   ["progress", "week", "review", "check", "update", "log", "improve", "result"],
     "Plan":       ["plan", "program", "schedule", "routine", "adjust", "change", "modify"],
 }
 
 
 def detect_topics(messages: list[dict]) -> list[str]:
-    """Detect which topics appear in a conversation."""
     full_text = " ".join(m.get("message", "").lower() for m in messages)
-    found = []
-    for topic, keywords in TOPIC_KEYWORDS.items():
-        if any(kw in full_text for kw in keywords):
-            found.append(topic)
+    found = [topic for topic, kws in TOPIC_KEYWORDS.items() if any(kw in full_text for kw in kws)]
     return found or ["General"]
 
 
 def group_by_date(messages: list[dict]) -> dict[str, list[dict]]:
-    """Group messages by date string YYYY-MM-DD."""
     groups: dict[str, list[dict]] = {}
     for msg in messages:
         ts = msg.get("timestamp", "")
-        if ts:
-            day = ts[:10]
-        else:
-            day = date.today().isoformat()
+        day = ts[:10] if ts else date.today().isoformat()
         groups.setdefault(day, []).append(msg)
     return groups
 
 
 def format_conversation_note(day: str, messages: list[dict], user_name: str = "Bhavik") -> str:
-    """Build an Obsidian markdown note for one day's conversation."""
     topics = detect_topics(messages)
     topic_links = " ".join(f"[[{t}]]" for t in topics)
     weekday = datetime.fromisoformat(day).strftime("%A")
@@ -71,7 +63,7 @@ def format_conversation_note(day: str, messages: list[dict], user_name: str = "B
         "",
         "---",
         "",
-        f"## Topics Covered",
+        "## Topics Covered",
         ", ".join(topics),
         "",
         "## Exchanges",
@@ -86,35 +78,24 @@ def format_conversation_note(day: str, messages: list[dict], user_name: str = "B
             lines.append(f"**[{ts}] {role}:** {text}")
             lines.append("")
 
-    # Key insights section — pull coach messages as observations
     coach_msgs = [m["message"] for m in messages if m.get("role") == "coach"]
     if coach_msgs:
-        lines += [
-            "## Coach Observations",
-            "",
-        ]
-        for cm in coach_msgs[:3]:  # top 3 coach responses as reference
+        lines += ["## Coach Observations", ""]
+        for cm in coach_msgs[:3]:
             summary = cm[:200].replace("\n", " ")
             lines.append(f"- {summary}...")
             lines.append("")
 
-    lines += [
-        "---",
-        "",
-        f"*Exported automatically — {len(messages)} messages*",
-    ]
-
+    lines += ["---", "", f"*Exported automatically - {len(messages)} messages*"]
     return "\n".join(lines)
 
 
 def export_conversations(memory, user_id: str, days: int = 30) -> int:
     """
-    Pull conversations from Supabase, write structured Obsidian notes.
+    Pull conversations from Supabase, write structured notes.
+    Saves to Supabase (persistent) + Obsidian (if available).
     Returns number of notes written.
     """
-    CONVERSATIONS_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Pull all messages for the period
     cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
     result = (
         memory.db.table("conversations")
@@ -131,33 +112,112 @@ def export_conversations(memory, user_id: str, days: int = 30) -> int:
         return 0
 
     grouped = group_by_date(messages)
-    written = 0
 
-    # Get user name from profile
     try:
         profile = memory.get_profile(user_id)
         user_name = profile.get("name", "Bhavik") if profile else "Bhavik"
     except Exception:
         user_name = "Bhavik"
 
+    written = 0
     for day, day_messages in sorted(grouped.items()):
-        note_path = CONVERSATIONS_DIR / f"Chat - {day}.md"
+        topics = detect_topics(day_messages)
         content = format_conversation_note(day, day_messages, user_name)
-        note_path.write_text(content, encoding="utf-8")
-        print(f"  Wrote: Chat - {day}.md ({len(day_messages)} messages)")
+
+        # 1. Save to Supabase (always — survives Railway restarts)
+        try:
+            memory.db.table("conversation_notes").upsert({
+                "user_id": user_id,
+                "note_date": day,
+                "topics": ", ".join(topics),
+                "content": content,
+                "msg_count": len(day_messages),
+                "updated_at": datetime.utcnow().isoformat(),
+            }).execute()
+            print(f"  Saved to Supabase: Chat - {day} ({len(day_messages)} messages)")
+        except Exception as exc:
+            print(f"  Supabase save failed for {day}: {exc}")
+
+        # 2. Write to Obsidian vault if accessible (local dev / volume mount)
+        if CONVERSATIONS_DIR:
+            try:
+                CONVERSATIONS_DIR.mkdir(parents=True, exist_ok=True)
+                note_path = CONVERSATIONS_DIR / f"Chat - {day}.md"
+                note_path.write_text(content, encoding="utf-8")
+                print(f"  Wrote Obsidian: Chat - {day}.md")
+            except Exception as exc:
+                print(f"  Obsidian write skipped ({exc})")
+
         written += 1
 
-    # Update the Conversations Index note
-    _update_index(grouped, user_name)
+    # Update Obsidian index if vault is accessible
+    if CONVERSATIONS_DIR:
+        _update_obsidian_index(grouped)
 
-    print(f"\nExported {written} conversation notes to Obsidian.")
+    print(f"\nExported {written} conversation notes.")
+
+    # Re-ingest conversation notes into ChromaDB
+    _reingest_notes(memory, user_id)
+
     return written
 
 
-def _update_index(grouped: dict[str, list], user_name: str) -> None:
-    """Rebuild the Conversations Index note with links to all days."""
-    index_path = Path(OBSIDIAN_VAULT) / "Conversations Index.md"
+def _reingest_notes(memory, user_id: str) -> None:
+    """Pull notes from Supabase and add them to ChromaDB."""
+    try:
+        import chromadb
+        from sentence_transformers import SentenceTransformer
+        import hashlib
 
+        db_path = os.getenv("CHROMA_DB_PATH", "./chroma_db")
+        client = chromadb.PersistentClient(path=db_path)
+        try:
+            collection = client.get_collection("fitness_docs")
+        except Exception:
+            print("  ChromaDB collection not found — skipping note re-ingest.")
+            return
+
+        embedder = SentenceTransformer("all-MiniLM-L6-v2")
+
+        result = (
+            memory.db.table("conversation_notes")
+            .select("note_date, topics, content")
+            .eq("user_id", user_id)
+            .order("note_date", desc=True)
+            .limit(90)
+            .execute()
+        )
+        notes = result.data if result.data else []
+
+        added = 0
+        for note in notes:
+            text = note["content"]
+            words = text.split()
+            if len(words) < 20:
+                continue
+            doc_id = hashlib.md5(f"conv_note_{user_id}_{note['note_date']}".encode()).hexdigest()
+            emb = embedder.encode(text[:2000]).tolist()
+            collection.upsert(
+                embeddings=[emb],
+                documents=[text[:2000]],
+                ids=[doc_id],
+                metadatas=[{
+                    "source": f"Chat - {note['note_date']}.md",
+                    "folder": "Conversations",
+                    "type": "conversation_note",
+                    "topics": note.get("topics", ""),
+                    "chunk_index": 0,
+                }],
+            )
+            added += 1
+
+        print(f"  Re-ingested {added} conversation notes into ChromaDB.")
+    except Exception as exc:
+        print(f"  ChromaDB re-ingest skipped: {exc}")
+
+
+def _update_obsidian_index(grouped: dict[str, list]) -> None:
+    index_path = Path(OBSIDIAN_VAULT) / "Conversations Index.md"
     days_sorted = sorted(grouped.keys(), reverse=True)
 
     lines = [
@@ -172,31 +232,22 @@ def _update_index(grouped: dict[str, list], user_name: str) -> None:
         "## All Sessions",
         "",
     ]
-
     for day in days_sorted:
         msgs = grouped[day]
         topics = detect_topics(msgs)
         weekday = datetime.fromisoformat(day).strftime("%A")
-        topic_str = ", ".join(topics)
-        lines.append(f"- [[Conversations/Chat - {day}|{weekday} {day}]] — {topic_str} ({len(msgs)} messages)")
+        lines.append(f"- [[Conversations/Chat - {day}|{weekday} {day}]] - {', '.join(topics)} ({len(msgs)} messages)")
 
     lines += [
-        "",
-        "---",
-        "",
-        "## Topics",
-        "",
-        "- [[Workout]]",
-        "- [[Nutrition]]",
-        "- [[Sleep]]",
-        "- [[Weight]]",
-        "- [[Motivation]]",
-        "- [[Progress]]",
-        "- [[Plan]]",
+        "", "---", "", "## Topics", "",
+        "- [[Workout]]", "- [[Nutrition]]", "- [[Sleep]]",
+        "- [[Weight]]", "- [[Motivation]]", "- [[Progress]]", "- [[Plan]]",
     ]
-
-    index_path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"  Updated: Conversations Index.md")
+    try:
+        index_path.write_text("\n".join(lines), encoding="utf-8")
+        print(f"  Updated: Conversations Index.md")
+    except Exception as exc:
+        print(f"  Obsidian index skipped: {exc}")
 
 
 if __name__ == "__main__":
@@ -208,4 +259,4 @@ if __name__ == "__main__":
     else:
         memory = CoachMemory()
         export_conversations(memory, user_id, days=90)
-        print("\nDone. Now run: python ingest.py to re-index into ChromaDB.")
+        print("\nDone.")
