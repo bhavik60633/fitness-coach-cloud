@@ -1,0 +1,226 @@
+{
+  "main": {
+    "id": "b4ee8ffd921a2a7d",
+    "type": "split",
+    "children": [
+      {
+        "id": "33c020ec041a1b65",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "659dd952a55477d3",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "🏋️ Fitness Hub.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "🏋️ Fitness Hub"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "9b18366e9a7e3fcc",
+    "type": "split",
+    "children": [
+      {
+        "id": "ded25a417addaf8c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "a51bbe3f5c5a4e5c",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "6e7c5b7b4a63ac3c",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "e9f642ff9a083359",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "51437ad6810ee4e1",
+    "type": "split",
+    "children": [
+      {
+        "id": "a8cad59dbe3fbbf2",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "29eb32b0174a261d",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "🏋️ Fitness Hub.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for 🏋️ Fitness Hub"
+            }
+          },
+          {
+            "id": "43ce3576c85e3316",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "🏋️ Fitness Hub.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from 🏋️ Fitness Hub"
+            }
+          },
+          {
+            "id": "a4677ac5075f5e89",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "b42e9a594e873ce0",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "92f086e584332d3c",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "🏋️ Fitness Hub.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of 🏋️ Fitness Hub"
+            }
+          }
+        ],
+        "currentTab": 4
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "a51bbe3f5c5a4e5c",
+  "lastOpenFiles": [
+    "Andrej Karpathy.md",
+    "Fitness PDFs/Fitness Coach/TheETFcookbook (2).pdf",
+    "ETF Cookbook.md",
+    "Nutrition & Diet.md",
+    "1500 Cal Veg Whey Plan.md",
+    "🏋️ Fitness Hub.md",
+    "Trainers & Coaches.md",
+    "Workout Programming.md",
+    "Lecture Notes Index.md",
+    "Lecture 15.md",
+    "Fitness PDFs/Diet Plans/Screenshot 2026-03-30 172611.pdf",
+    "Clippings/Mobile User Acquisition 101 A Beginner's Guide.md",
+    "Lecture 20.md",
+    "Lecture 19.md",
+    "Lecture 18.md",
+    "Lecture 17.md",
+    "Lecture 16.md",
+    "Lecture 5.md",
+    "Lecture 4.md",
+    "Lecture 3.md",
+    "Lecture 2.md",
+    "Lecture 21 - Exercise Selection.md",
+    "Diet Plan Screenshots.md",
+    "How to Eat Like ETF.md",
+    "62 Macro Friendly Recipes.md",
+    "Fix Your Sleep Manual.md",
+    "Exercise Programming Summaries.md",
+    "DIY Workout Plan.md",
+    "Fitness PDFs/Diet Plans/Screenshot 2026-03-30 172439.pdf",
+    "Fitness PDFs/Lecture Notes/LECTURE5.pdf",
+    "Fitness PDFs/Lecture Notes/LECTURE18.pdf",
+    "Untitled.canvas",
+    "Fitness PDFs/Lecture Notes/LECTURE15.pdf",
+    "Fitness PDFs/Lecture Notes/lecture2 (1).pdf",
+    "Fitness PDFs/Lecture Notes/Lecture_21_Exercise_Selection.pdf",
+    "Fitness PDFs/Diet Plans/Screenshot 2026-03-30 172521.pdf",
+    "Untitled.base"
+  ]
+}

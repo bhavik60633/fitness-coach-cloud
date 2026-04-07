@@ -1,0 +1,33 @@
+# Render.com deployment config
+# Push this repo to GitHub → connect to Render → it auto-deploys
+
+services:
+  - type: worker
+    name: fitness-coach-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: singapore  # closest to India
+    plan: starter      # $7/mo — always on, no sleep
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TELEGRAM_USER_ID
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: CHROMA_DB_PATH
+        value: /app/chroma_db
+      - key: OBSIDIAN_VAULT_PATH
+        value: /app/obsidian_vault
+      - key: OPENAI_API_KEY
+        sync: false
+    disk:
+      name: chroma-data
+      mountPath: /app/chroma_db
+      sizeGB: 1

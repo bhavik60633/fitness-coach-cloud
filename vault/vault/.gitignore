@@ -1,0 +1,13 @@
+# Obsidian system files
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.trash/
+
+# PDFs already in docs/ — no need to duplicate
+Fitness PDFs/
+*.pdf
+
+# Temp files
+*.tmp
+*.log

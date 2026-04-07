@@ -1,13 +1,18 @@
-# Obsidian system files
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
-.obsidian/cache
-.trash/
+# Secrets
+.env
 
-# PDFs already in docs/ — no need to duplicate
-Fitness PDFs/
-*.pdf
+# Python
+__pycache__/
+*.pyc
+*.pyo
 
-# Temp files
-*.tmp
-*.log
+# Local database
+*.db
+coach_memory.db
+
+# ChromaDB (rebuilt on server via ingest.py)
+chroma_db/
+
+# OS files
+.DS_Store
+Thumbs.db
