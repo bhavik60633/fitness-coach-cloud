@@ -118,15 +118,30 @@ class FitnessCoachRAG:
             raise RuntimeError("OPENAI_API_KEY not set!")
         self.openai = OpenAI(api_key=api_key)
 
-        # ChromaDB
-        self.chroma     = chromadb.PersistentClient(path=db_path)
-        self.collection = self.chroma.get_collection(COLLECTION)
-
-        # Embedder
+        # Embedder (load before ChromaDB so it's ready for auto-ingest)
         self.embedder = SentenceTransformer(EMBED_MODEL)
 
+        # ChromaDB — auto-ingest if collection missing
+        self.chroma = chromadb.PersistentClient(path=db_path)
+        try:
+            self.collection = self.chroma.get_collection(COLLECTION)
+        except Exception:
+            print("ChromaDB collection not found — running ingest now...")
+            self._auto_ingest(db_path)
+            self.collection = self.chroma.get_collection(COLLECTION)
+
         count = self.collection.count()
-        print(f"✅  RAG engine ready — {count:,} chunks in knowledge base (brain active)")
+        print(f"RAG engine ready -- {count:,} chunks in knowledge base (brain active)")
+
+    def _auto_ingest(self, db_path: str) -> None:
+        """Run ingest automatically if ChromaDB collection is missing."""
+        from ingest import ingest
+        from pathlib import Path
+        script_dir = Path(__file__).parent.resolve()
+        docs_dir   = script_dir / "docs"
+        obsidian   = os.getenv("OBSIDIAN_VAULT_PATH", "")
+        dirs = [str(docs_dir)] if docs_dir.exists() else []
+        ingest(dirs, db_path=db_path, obsidian_vault=obsidian)
 
     # ── Retrieval ─────────────────────────────────────────────────────────
 
