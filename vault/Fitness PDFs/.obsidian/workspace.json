@@ -11,10 +11,12 @@
             "id": "e587150260472cfa",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "pdf",
+              "state": {
+                "file": "Lecture Notes/LECTURE20.pdf"
+              },
+              "icon": "lucide-file-text",
+              "title": "LECTURE20"
             }
           }
         ]
@@ -90,6 +92,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "Lecture Notes/LECTURE20.pdf",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -99,7 +102,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks"
+              "title": "Backlinks for LECTURE20"
             }
           },
           {
@@ -108,11 +111,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
+                "file": "Lecture Notes/LECTURE20.pdf",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links"
+              "title": "Outgoing links from LECTURE20"
             }
           },
           {
@@ -150,12 +154,13 @@
             "state": {
               "type": "outline",
               "state": {
+                "file": "Lecture Notes/LECTURE20.pdf",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline"
+              "title": "Outline of LECTURE20"
             }
           }
         ]
@@ -173,13 +178,17 @@
       "daily-notes:Open today's daily note": false,
       "templates:Insert template": false,
       "command-palette:Open command palette": false,
-      "bases:Create new base": false
+      "bases:Create new base": false,
+      "githobs:Manage a github issue": false,
+      "obsidian-git:Open Git source control": false
     }
   },
   "active": "e587150260472cfa",
   "lastOpenFiles": [
-    "Lecture Notes/lecture2.pdf",
     "Lecture Notes/Lecture_21_Exercise_Selection.pdf",
+    "Clippings/Anabolic signals and muscle hypertrophy – Significance for strength training in sports medicine.md",
+    "Clippings",
+    "Lecture Notes/lecture2.pdf",
     "Fitness Coach/exercise_programming_summaries.pdf",
     "Fitness Coach/Digidarts-AOP-2026-27.pdf",
     "Fitness Coach/1500VegWhey(120-140)pOPTIMALTODIRTY (2).pdf",
