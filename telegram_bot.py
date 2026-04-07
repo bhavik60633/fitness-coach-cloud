@@ -36,6 +36,7 @@ from rag_engine import FitnessCoachRAG
 from followup_engine import FollowupEngine, PatternTracker
 from smart_scheduler import SmartScheduler
 from conversation_exporter import export_conversations
+from infographic_generator import is_graphic_request, generate_infographic
 
 # ── Load environment ──────────────────────────────────────────────────────
 load_dotenv()
@@ -917,6 +918,22 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
         answer = f"⚠️ Something went wrong: {exc}"
 
     await reply(update, answer)
+
+    # Send infographic if user asked for a visual/graphic/picture
+    if is_graphic_request(question):
+        try:
+            await ctx.bot.send_chat_action(
+                chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_PHOTO
+            )
+            loop = asyncio.get_event_loop()
+            img_bytes = await loop.run_in_executor(None, generate_infographic, question)
+            await ctx.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=img_bytes,
+                caption="Here's your visual breakdown!",
+            )
+        except Exception as exc:
+            logger.warning(f"Infographic generation failed: {exc}")
 
     # 🧠 Set up smart scheduler jobs on first interaction
     if ctx.job_queue and AUTHORIZED_USER:
