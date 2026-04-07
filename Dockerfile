@@ -17,6 +17,9 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # Copy application code
 COPY . .
 
+# Build ChromaDB knowledge base from PDFs + Obsidian notes
+RUN CHROMA_DB_PATH=/app/chroma_db python ingest.py
+
 # Expose port for health check (optional)
 EXPOSE 8000
 

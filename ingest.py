@@ -179,12 +179,21 @@ def ingest(base_dirs: list[str], db_path: str = DB_PATH, obsidian_vault: str = O
 
 # ---- Entry point ------------------------------------------------------------
 if __name__ == "__main__":
-    # PDFs live under "DIY fitness/" (two levels up from cloud/)
     script_dir = Path(__file__).parent.resolve()
-    diy_fitness = script_dir.parent.parent  # cloud/ -> fitness_coach_rag/ -> DIY fitness/
+    local_docs  = script_dir / "docs"           # cloud/docs/  (in repo, used on Render)
+    diy_fitness = script_dir.parent.parent       # local dev: DIY fitness/
 
-    dirs = [
-        str(diy_fitness / "Fitness Coach Details"),
-        str(diy_fitness / "diet planss"),
-    ]
+    if local_docs.exists():
+        # Running on Render / Docker — PDFs are inside cloud/docs/
+        dirs = [
+            str(local_docs),
+            str(local_docs / "diet planss"),
+        ]
+    else:
+        # Running locally — PDFs are in the parent DIY fitness folder
+        dirs = [
+            str(diy_fitness / "Fitness Coach Details"),
+            str(diy_fitness / "diet planss"),
+        ]
+
     ingest(dirs, obsidian_vault=OBSIDIAN_VAULT)
