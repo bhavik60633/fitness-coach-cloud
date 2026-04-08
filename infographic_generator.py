@@ -587,75 +587,81 @@ def is_graphic_request(text: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DALL-E 3 AI IMAGE GENERATION
+# GOOGLE IMAGEN 3 — AI IMAGE GENERATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_dalle_prompt(question: str) -> str:
-    """Build a detailed DALL-E 3 prompt from the user's fitness question."""
+def _build_imagen_prompt(question: str) -> str:
+    """Build a photorealistic Imagen 3 prompt. NO text in image — purely visual."""
     topic = detect_topic(question)
-    base_style = (
-        "Dark background fitness infographic poster, modern design, "
-        "vibrant colors, clean typography, professional gym aesthetic. "
-        "No text watermarks. High quality digital art."
+    style = (
+        "Photorealistic, ultra-detailed, professional fitness photography, "
+        "vibrant gym lighting, dark moody background, no text overlays, "
+        "no words, no labels, purely visual."
     )
     prompts = {
         "workout_plan": (
-            "A detailed weekly workout plan fitness poster. Shows 7 days of exercises "
-            "with muscle groups highlighted on an anatomical body diagram. "
-            "Icons for dumbbells, barbells, pull-up bars. "
-            f"{base_style}"
+            "A fit athlete performing a series of strength exercises: bench press, squats, "
+            "deadlifts, pull-ups and shoulder press. Dynamic action shots arranged in a grid. "
+            "Professional gym, dramatic lighting, muscular physique. " + style
         ),
         "nutrition_muscle": (
-            "A fitness nutrition infographic showing how food builds muscle. "
-            "Shows protein foods like chicken, eggs, fish, dal on one side, "
-            "a muscular body in the center, and arrows showing protein synthesis. "
-            "Pie chart showing macros breakdown. "
-            f"{base_style}"
+            "A beautiful flat-lay arrangement of muscle-building foods: grilled chicken breast, "
+            "boiled eggs, brown rice, green vegetables, whey protein shake, almonds and dal. "
+            "Gym equipment subtly in background. Studio food photography. " + style
         ),
         "fat_loss": (
-            "A fat loss transformation fitness poster. Shows calorie deficit scale, "
-            "before/after body silhouette, best foods for fat loss, "
-            "cardio and strength training icons, sleep tracker. "
-            f"{base_style}"
+            "A fit person running on a track at sunset, showing athletic body transformation. "
+            "Salad bowl and water bottle beside. Energetic, motivational. " + style
         ),
         "macros": (
-            "A macronutrient breakdown fitness poster showing protein, carbohydrates "
-            "and fats with food icons, percentage bars and daily targets. "
-            "Colorful bar charts. Scientific yet visual style. "
-            f"{base_style}"
+            "Three groups of foods artistically arranged: high-protein foods (chicken, eggs, fish), "
+            "carbohydrates (oats, rice, banana, sweet potato), healthy fats (avocado, nuts, olive oil). "
+            "Clean studio lighting, top-down view. " + style
+        ),
+        "sleep": (
+            "A peaceful bedroom with blackout curtains, a person sleeping deeply, "
+            "moonlight through window, calm and restorative atmosphere. " + style
         ),
     }
     return prompts.get(topic, prompts["nutrition_muscle"])
 
 
-def generate_ai_image(question: str, openai_api_key: str) -> bytes:
-    """Generate an AI image using DALL-E 3 and return PNG bytes."""
-    import openai
-    client = openai.OpenAI(api_key=openai_api_key)
-    prompt = _build_dalle_prompt(question)
-    response = client.images.generate(
-        model="dall-e-3",
-        prompt=prompt,
-        size="1024x1024",
-        quality="standard",
-        n=1,
-        response_format="b64_json",
+def generate_google_image(question: str, google_api_key: str) -> bytes:
+    """Generate image using Google Imagen 3 via Google AI (Gemini API)."""
+    import requests, base64
+    prompt = _build_imagen_prompt(question)
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"imagen-3.0-generate-002:predict?key={google_api_key}"
     )
-    import base64
-    img_b64 = response.data[0].b64_json
+    payload = {
+        "instances": [{"prompt": prompt}],
+        "parameters": {
+            "sampleCount": 1,
+            "aspectRatio": "16:9",
+            "safetyFilterLevel": "block_only_high",
+            "personGeneration": "allow_adult",
+        }
+    }
+    resp = requests.post(url, json=payload, timeout=60)
+    resp.raise_for_status()
+    data = resp.json()
+    img_b64 = data["predictions"][0]["bytesBase64Encoded"]
     return base64.b64decode(img_b64)
 
 
-def generate_infographic(question: str, openai_api_key: str = "") -> bytes:
+def generate_infographic(question: str, openai_api_key: str = "", google_api_key: str = "") -> bytes:
     """
-    Try DALL-E 3 AI image first (if API key provided),
-    fall back to matplotlib chart.
+    Priority:
+    1. Google Imagen 3 (if GOOGLE_API_KEY set) — best quality, photorealistic
+    2. Matplotlib chart — clear, readable infographic (always works, no cost)
     """
-    if openai_api_key:
+    if google_api_key:
         try:
-            return generate_ai_image(question, openai_api_key)
+            return generate_google_image(question, google_api_key)
         except Exception as e:
-            print(f"DALL-E failed, using matplotlib: {e}")
+            print(f"Google Imagen failed, using matplotlib chart: {e}")
+    # Always fall back to crisp matplotlib infographic
     topic = detect_topic(question)
     builder = BUILDERS.get(topic, _build_nutrition_muscle)
     return builder()

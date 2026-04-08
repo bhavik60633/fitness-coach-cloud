@@ -926,9 +926,9 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
                 chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_PHOTO
             )
             loop = asyncio.get_event_loop()
-            openai_key = os.getenv("OPENAI_API_KEY", "")
+            google_key = os.getenv("GOOGLE_API_KEY", "")
             img_bytes = await loop.run_in_executor(
-                None, generate_infographic, question, openai_key
+                None, generate_infographic, question, "", google_key
             )
             await ctx.bot.send_photo(
                 chat_id=update.effective_chat.id,
