@@ -55,6 +55,13 @@ def _arrow(ax, x1, y1, x2, y2, color=WHITE, lw=1.5):
 # ─────────────────────────────────────────────────────────────────────────────
 
 TOPICS = {
+    "workout_plan": [
+        r"exercise.*plan", r"plan.*exercise", r"workout.*plan", r"plan.*workout",
+        r"training.*plan", r"plan.*training", r"exercise.*program",
+        r"gym.*routine", r"strength.*plan", r"week.*plan", r"plan.*week",
+        r"day.*exercise", r"exercise.*day", r"workout.*schedule",
+        r"full.*body.*workout", r"upper.*lower", r"push.*pull",
+    ],
     "nutrition_muscle": [
         r"food.*muscle", r"muscle.*food", r"eat.*muscle", r"muscle.*eat",
         r"nutrition.*muscle", r"muscle.*nutrition", r"build.*muscle",
@@ -64,10 +71,6 @@ TOPICS = {
     "macros": [
         r"macro", r"protein.*carb", r"carb.*fat", r"protein.*fat",
         r"calories.*breakdown", r"calorie.*split",
-    ],
-    "workout_plan": [
-        r"workout.*plan", r"training.*plan", r"exercise.*program",
-        r"gym.*routine", r"strength.*plan",
     ],
     "fat_loss": [
         r"fat.*loss", r"lose.*fat", r"weight.*loss", r"lose.*weight",
@@ -433,14 +436,141 @@ def _build_fat_loss() -> bytes:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# INFOGRAPHIC 4 — Weekly Workout Plan
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_workout_plan() -> bytes:
+    fig = plt.figure(figsize=(14, 11))
+    fig.patch.set_facecolor(BG)
+
+    ax_title = fig.add_axes([0, 0.93, 1, 0.07])
+    ax_title.set_facecolor(CARD_MID)
+    ax_title.axis("off")
+    ax_title.text(0.5, 0.65, "7-DAY WORKOUT PLAN — Build Strength & Muscle",
+                  fontsize=17, color=WHITE, ha="center", va="center",
+                  fontweight="bold", transform=ax_title.transAxes)
+    ax_title.text(0.5, 0.18, "Progressive overload • Rest days included • Home & gym compatible",
+                  fontsize=10, color=GREY, ha="center", va="center",
+                  transform=ax_title.transAxes)
+
+    ax = fig.add_axes([0, 0, 1, 0.93])
+    ax.set_facecolor(BG)
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    ax.axis("off")
+
+    # ── 7-day schedule grid ──
+    days = [
+        ("DAY 1",  BLUE,   "UPPER BODY\nSTRENGTH",
+         ["Bench Press  4x8-10", "Bent-over Row  4x8-10",
+          "Shoulder Press  3x10-12", "Pull-ups / Lat PD  3x10",
+          "Bicep Curl  3x12", "Tricep Pushdown  3x12"],
+         "Chest, Back\nShoulders, Arms"),
+
+        ("DAY 2",  GREEN,  "LOWER BODY\nSTRENGTH",
+         ["Squat  4x8-10", "Romanian Deadlift  4x8-10",
+          "Leg Press  3x12", "Lunges  3x12 each",
+          "Leg Curl  3x12", "Calf Raises  4x15-20"],
+         "Quads, Hamstrings\nGlutes, Calves"),
+
+        ("DAY 3",  ORANGE, "CARDIO &\nCORE",
+         ["20-30 min cardio (run/cycle)", "Plank  3x45-60 sec",
+          "Bicycle Crunches  3x20", "Russian Twists  3x20",
+          "Leg Raises  3x15", "Side Plank  2x30 sec"],
+         "Core, Cardiovascular\nEndurance"),
+
+        ("DAY 4",  GREY,   "ACTIVE\nRECOVERY",
+         ["Light 20-min walk", "Full body stretching  20 min",
+          "Foam rolling", "Yoga or mobility work",
+          "Light swimming (optional)", "Focus: sleep & nutrition"],
+         "Recovery, Mobility\nFlexibility"),
+
+        ("DAY 5",  PURPLE, "PUSH DAY\n(Chest/Shoulder/Tri)",
+         ["Incline Press  4x8-10", "Dumbbell Flyes  3x12",
+          "Lateral Raises  4x15", "Arnold Press  3x10-12",
+          "Skull Crushers  3x12", "Dips  3x10-12"],
+         "Chest, Shoulders\nTriceps"),
+
+        ("DAY 6",  CYAN,   "PULL DAY\n(Back/Biceps)",
+         ["Deadlift  4x5-6", "Pull-ups  4x6-10",
+          "Cable Row  3x10-12", "Face Pulls  3x15",
+          "Hammer Curl  3x12", "Reverse Fly  3x15"],
+         "Back, Biceps\nRear Delts"),
+
+        ("DAY 7",  RED,    "REST DAY",
+         ["Full rest — no gym", "High protein meals",
+          "8+ hours sleep", "Hydrate well (3L water)",
+          "Plan next week", "Review your progress"],
+         "Recovery\nMuscle repair"),
+    ]
+
+    cols_per_row = 4
+    box_w = 0.235
+    box_h = 0.38
+    gap_x = 0.013
+    gap_y = 0.025
+
+    positions = []
+    # Row 1: days 0-3
+    for i in range(4):
+        positions.append((0.01 + i * (box_w + gap_x), 0.555))
+    # Row 2: days 4-6 centered
+    for i in range(3):
+        positions.append((0.01 + (i + 0.5) * (box_w + gap_x), 0.145))
+
+    for idx, (day_label, col, focus, exercises, muscles) in enumerate(days):
+        x, y = positions[idx]
+        _rbox(ax, x, y, box_w, box_h, col, alpha=0.10)
+        _rbox(ax, x, y + box_h - 0.045, box_w, 0.045, col, alpha=0.40)
+
+        # Day label + focus
+        _txt(ax, x + box_w/2, y + box_h - 0.022, day_label, size=8.5, bold=True, color=WHITE)
+        for k, line in enumerate(focus.split("\n")):
+            _txt(ax, x + box_w/2, y + box_h - 0.058 - k*0.022, line, size=8, bold=True, color=col)
+
+        # Exercises
+        for k, ex in enumerate(exercises):
+            _txt(ax, x + box_w/2, y + box_h - 0.115 - k*0.042, ex, size=7.5, color=GREY)
+
+        # Muscles badge
+        _rbox(ax, x + 0.01, y + 0.005, box_w - 0.02, 0.03, col, alpha=0.2)
+        _txt(ax, x + box_w/2, y + 0.020, muscles.replace("\n", "  |  "), size=7, color=col)
+
+    # ── Key principles strip ──
+    _rbox(ax, 0.01, 0.02, 0.98, 0.115, CARD_MID, alpha=0.6)
+    _txt(ax, 0.5, 0.127, "KEY PRINCIPLES FOR MAXIMUM RESULTS", size=9, bold=True, color=YELLOW)
+
+    principles = [
+        (BLUE,   "Progressive\nOverload",    "Add 2.5kg or 1 rep\nevery week to lifts"),
+        (GREEN,  "Protein\nIntake",          "2.2g per kg weight\nevery single day"),
+        (ORANGE, "Sleep\n& Recovery",        "7-9 hrs sleep\nMuscle grows at rest"),
+        (PURPLE, "Warm-up\nEvery Session",   "5-10 min always\nPrevents injury"),
+        (CYAN,   "Track Your\nWorkouts",     "Log sets, reps, weight\nSee real progress"),
+    ]
+    for i, (col, title, detail) in enumerate(principles):
+        px = 0.02 + i * 0.196
+        _rbox(ax, px, 0.028, 0.185, 0.083, col, alpha=0.12)
+        for k, line in enumerate(title.split("\n")):
+            _txt(ax, px + 0.0925, 0.097 - k*0.02, line, size=8, bold=True, color=col)
+        for k, line in enumerate(detail.split("\n")):
+            _txt(ax, px + 0.0925, 0.055 - k*0.018, line, size=7.5, color=GREY)
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=150, bbox_inches="tight",
+                facecolor=BG, edgecolor="none")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PUBLIC API
 # ─────────────────────────────────────────────────────────────────────────────
 
 BUILDERS = {
+    "workout_plan":     _build_workout_plan,
     "nutrition_muscle": _build_nutrition_muscle,
     "macros":           _build_macros,
     "fat_loss":         _build_fat_loss,
-    "workout_plan":     _build_nutrition_muscle,   # fallback to nutrition for now
     "sleep":            _build_nutrition_muscle,
 }
 
@@ -450,14 +580,82 @@ def is_graphic_request(text: str) -> bool:
     keywords = [
         "graphic", "picture", "visual", "infographic",
         "chart", "diagram", "image", "show me",
-        "illustrate", "draw", "graph", "poster",
+        "illustrate", "draw", "graph", "poster", "pic",
     ]
     text_lower = text.lower()
     return any(kw in text_lower for kw in keywords)
 
 
-def generate_infographic(question: str) -> bytes:
-    """Detect topic from question and return PNG bytes of the infographic."""
+# ─────────────────────────────────────────────────────────────────────────────
+# DALL-E 3 AI IMAGE GENERATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_dalle_prompt(question: str) -> str:
+    """Build a detailed DALL-E 3 prompt from the user's fitness question."""
+    topic = detect_topic(question)
+    base_style = (
+        "Dark background fitness infographic poster, modern design, "
+        "vibrant colors, clean typography, professional gym aesthetic. "
+        "No text watermarks. High quality digital art."
+    )
+    prompts = {
+        "workout_plan": (
+            "A detailed weekly workout plan fitness poster. Shows 7 days of exercises "
+            "with muscle groups highlighted on an anatomical body diagram. "
+            "Icons for dumbbells, barbells, pull-up bars. "
+            f"{base_style}"
+        ),
+        "nutrition_muscle": (
+            "A fitness nutrition infographic showing how food builds muscle. "
+            "Shows protein foods like chicken, eggs, fish, dal on one side, "
+            "a muscular body in the center, and arrows showing protein synthesis. "
+            "Pie chart showing macros breakdown. "
+            f"{base_style}"
+        ),
+        "fat_loss": (
+            "A fat loss transformation fitness poster. Shows calorie deficit scale, "
+            "before/after body silhouette, best foods for fat loss, "
+            "cardio and strength training icons, sleep tracker. "
+            f"{base_style}"
+        ),
+        "macros": (
+            "A macronutrient breakdown fitness poster showing protein, carbohydrates "
+            "and fats with food icons, percentage bars and daily targets. "
+            "Colorful bar charts. Scientific yet visual style. "
+            f"{base_style}"
+        ),
+    }
+    return prompts.get(topic, prompts["nutrition_muscle"])
+
+
+def generate_ai_image(question: str, openai_api_key: str) -> bytes:
+    """Generate an AI image using DALL-E 3 and return PNG bytes."""
+    import openai
+    client = openai.OpenAI(api_key=openai_api_key)
+    prompt = _build_dalle_prompt(question)
+    response = client.images.generate(
+        model="dall-e-3",
+        prompt=prompt,
+        size="1024x1024",
+        quality="standard",
+        n=1,
+        response_format="b64_json",
+    )
+    import base64
+    img_b64 = response.data[0].b64_json
+    return base64.b64decode(img_b64)
+
+
+def generate_infographic(question: str, openai_api_key: str = "") -> bytes:
+    """
+    Try DALL-E 3 AI image first (if API key provided),
+    fall back to matplotlib chart.
+    """
+    if openai_api_key:
+        try:
+            return generate_ai_image(question, openai_api_key)
+        except Exception as e:
+            print(f"DALL-E failed, using matplotlib: {e}")
     topic = detect_topic(question)
     builder = BUILDERS.get(topic, _build_nutrition_muscle)
     return builder()
